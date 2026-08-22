@@ -12,10 +12,6 @@ platform:
         region: us-east-2
       ui:
         enabled: true
-        branding:
-          bucket: hive-flow-ai-branding
-          symbol_key: HiveFlowAI Symbol.png
-          logo_key: HiveFlowAI Logo.png
         portal:
           default_client_id: poc
           default_max_users: 10

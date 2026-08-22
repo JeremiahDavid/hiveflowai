@@ -78,7 +78,6 @@ class PlatformAdminStack(Stack):
         ui_fn = self._create_admin_ui_lambda(
             lambda_runtime=lambda_runtime,
             environment=env,
-            ui_config=ui_config,
             portal_resources=portal_resources,
             admin_hostname=admin_hostname,
             config_bucket=self.config_bucket,
@@ -234,7 +233,6 @@ class PlatformAdminStack(Stack):
         *,
         lambda_runtime: HiveFlowLambdaRuntime,
         environment: str,
-        ui_config: dict[str, Any],
         portal_resources: dict[str, Any],
         admin_hostname: str,
         config_bucket: s3.IBucket,
@@ -269,18 +267,6 @@ class PlatformAdminStack(Stack):
             "HIVEFLOW_CONFIG_S3_URI": config_bucket.s3_url_for_object("config.yaml"),
         }
 
-        branding_cfg = ui_config.get("branding", {})
-        if isinstance(branding_cfg, dict):
-            branding_bucket_name = str(branding_cfg.get("bucket", "")).strip()
-            symbol_key = str(branding_cfg.get("symbol_key", "")).strip()
-            logo_key = str(branding_cfg.get("logo_key", "")).strip()
-            if branding_bucket_name:
-                environment_vars["HIVEFLOW_BRANDING_BUCKET"] = branding_bucket_name
-            if symbol_key:
-                environment_vars["HIVEFLOW_BRANDING_SYMBOL_KEY"] = symbol_key
-            if logo_key:
-                environment_vars["HIVEFLOW_BRANDING_LOGO_KEY"] = logo_key
-
         ui_fn = _lambda.Function(
             self,
             "PlatformAdminUiServeFunction",
@@ -299,14 +285,6 @@ class PlatformAdminStack(Stack):
         )
 
         config_bucket.grant_read_write(ui_fn, "config.yaml")
-
-        branding_bucket_name = environment_vars.get("HIVEFLOW_BRANDING_BUCKET", "")
-        if branding_bucket_name:
-            s3.Bucket.from_bucket_name(
-                self,
-                "BrandingBucket",
-                branding_bucket_name,
-            ).grant_read(ui_fn)
 
         session_secret.grant_read(ui_fn)
         ui_fn.add_to_role_policy(

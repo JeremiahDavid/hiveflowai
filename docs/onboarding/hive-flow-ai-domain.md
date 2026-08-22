@@ -171,7 +171,3 @@ aws cognito-idp admin-create-user `
   --desired-delivery-mediums EMAIL `
   --region us-east-2
 ```
-
-## Branding assets
-
-Logo and symbol PNGs are served from the branding bucket configured in `config.yaml`. GlobalUiStack grants the UI Lambda read access to each portal client's data bucket.

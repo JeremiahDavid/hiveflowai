@@ -76,8 +76,6 @@ flowchart TB
       RAPI["API Gateway REST<br/>hiveflow-reporting-poc"]
       RLAM["Lambda<br/>poc-dev-reporting-ui-serve<br/>HIVEFLOW_UI_MODE=reporting"]
     end
-
-    BRAND["S3 branding bucket<br/>hive-flow-ai-branding<br/>(external / not CDK-created)"]
   end
 
   Visitor -->|"https://hive-flow-ai.com<br/>/ · /platform · /pricing"| CD_APEX
@@ -91,7 +89,6 @@ flowchart TB
   GLAM --> COG
   GLAM --> SES
   GLAM --> SEC
-  GLAM --> BRAND
   RLAM --> COG
   RLAM --> SEC
   GlobalUI -.->|"exports Cognito + session"| Reporting
@@ -165,7 +162,7 @@ flowchart TB
 | **IngestStack-POC-dev** | `infra/stacks/ingest_stack.py` | Data lake S3, connector Lambdas / Step Functions / EventBridge, QBD SOAP API, Glue, Athena |
 | **GlobalDnaStack-dev** | `infra/stacks/global_dna_stack.py` | Global BC MS Learn source-docs scrape / relationships / tags |
 | **DnaStack-POC-dev** | `infra/stacks/dna_stack.py` | DNA publish + per-client source-docs gold merge |
-| **GlobalUiStack-dev** | `infra/stacks/global_ui_stack.py` | Public site, Cognito, SES, session secret, branding reads |
+| **GlobalUiStack-dev** | `infra/stacks/global_ui_stack.py` | Public site, Cognito, SES, session secret |
 | **ReportingStack-poc-dev** | `infra/stacks/reporting_stack.py` | Per-client reporting UI driven by `{company}_reporting_config`; seeds reporting sidecar on deploy; shares Cognito from GlobalUi |
 | **GlobalDnsStack-dev** | `infra/stacks/global_dns_stack.py` | Route 53, ACM, API Gateway custom domains (when `manage_dns: true`) |
 
@@ -196,7 +193,6 @@ App code: `packages/hiveflow-portal/packages/hiveflow-portal/src/hiveflow/dna/we
 | **Intuit QuickBooks Online** | OAuth2 → bronze ingest (`qbo`) |
 | **QuickBooks Desktop + QBWC** | SOAP poll → QBD Lambda via API Gateway `/soap` |
 | **Microsoft Entra ID + Business Central** | Client-credentials OData → bronze ingest (`dbc`) |
-| **S3 branding** | Pre-existing bucket `hive-flow-ai-branding` (not created by CDK) |
 
 ---
 
@@ -278,6 +274,5 @@ Browser → Route 53 → API Gateway custom domain → Lambda
 | DNA source / pack | `dbc` / `{company}_dna_config` + `{company}_reporting_config` |
 | Connector schedules | QBO/DBC 06:00 UTC; DNA 07:00 UTC |
 | SES from | `noreply@hive-flow-ai.com` |
-| Branding bucket | `hive-flow-ai-branding` |
 
 Routine UI deploys keep `manage_dns: false`. Deploy **GlobalDnsStack** only for DNS bootstrap or recovery — see [hive-flow-ai-domain.md](./onboarding/hive-flow-ai-domain.md).
