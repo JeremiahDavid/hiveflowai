@@ -414,30 +414,19 @@ def test_static_serves_echarts_bundle(tmp_path: Path) -> None:
     assert b"echarts" in static.data.lower()
 
 
-def test_branding_asset_from_s3(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_branding_ignores_legacy_s3_override(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    # The S3 branding override is retired; even with these env vars set (as a
+    # stale deploy config might still have them), static assets must come from
+    # the bundled files, never from S3.
     monkeypatch.setenv("HIVEFLOW_BRANDING_BUCKET", "hive-flow-ai-branding")
     monkeypatch.setenv("HIVEFLOW_BRANDING_SYMBOL_KEY", "HiveFlowAI Symbol.svg")
-
-    from hiveflow.dna.web import branding
-
-    fetch = branding._fetch_s3_object_cached
-    if hasattr(fetch, "cache_clear"):
-        fetch.cache_clear()
-
-    def fake_fetch(bucket: str, key: str) -> bytes:
-        assert bucket == "hive-flow-ai-branding"
-        assert key == "HiveFlowAI Symbol.svg"
-        return b"fake-svg-bytes"
-
-    monkeypatch.setattr(branding, "_fetch_s3_object", fake_fetch)
 
     client = _client(tmp_path)
     static = client.get("/static/hiveflowai-logo-mono.svg")
     assert static.status_code == 200
-    assert static.data == b"fake-svg-bytes"
-    client = _client(tmp_path)
-    pack = client.get("/api/pack")
-    assert pack.status_code == 401
+    assert static.mimetype == "image/svg+xml"
+    assert b"<svg" in static.data
+    assert static.data != b"fake-svg-bytes"
 
 
 def test_web_app_api_endpoints(tmp_path: Path, portal_env: None) -> None:
