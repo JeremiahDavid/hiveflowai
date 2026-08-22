@@ -15,10 +15,10 @@
           </div>
 
           <svg class="flow-bridge-svg" viewBox="0 0 720 36" aria-hidden="true">
-            <path d="M 268 34 C 268 18 292 6 318 6" stroke="#5eead4" stroke-width="1.5" stroke-dasharray="5 4" fill="none" opacity="0.55"/>
-            <path d="M 452 34 C 452 18 478 6 598 6" stroke="#fcd34d" stroke-width="1.5" stroke-dasharray="5 4" fill="none" opacity="0.55"/>
-            <text x="248" y="32" fill="#5eead4" font-size="10" font-family="system-ui,sans-serif" opacity="0.85">writes gold</text>
-            <text x="468" y="32" fill="#fcd34d" font-size="10" font-family="system-ui,sans-serif" opacity="0.85">writes layout</text>
+            <path d="M 268 34 C 268 18 292 6 318 6" style="stroke:var(--accent-mid)" stroke-width="1.5" stroke-dasharray="5 4" fill="none" opacity="0.55"/>
+            <path d="M 452 34 C 452 18 478 6 598 6" style="stroke:var(--accent-electric-gold)" stroke-width="1.5" stroke-dasharray="5 4" fill="none" opacity="0.55"/>
+            <text x="248" y="32" style="fill:var(--accent-mid)" font-size="10" font-family="system-ui,sans-serif" opacity="0.85">writes gold</text>
+            <text x="468" y="32" style="fill:var(--accent-electric-gold)" font-size="10" font-family="system-ui,sans-serif" opacity="0.85">writes layout</text>
           </svg>
 
           <div class="flow-band change">
@@ -27,9 +27,9 @@
               {{ m.flow_card(href="#platform-governance", title="Change request", subtitle="Doc update · review", icon=m.icon_change(), variant="change") }}
               <span class="flow-arrow" aria-hidden="true">→</span>
               <div class="flow-engines">
-                {{ m.flow_card(href="#platform-dna", title="DNA Engine", subtitle="Semantic logic", icon=m.engine_icon(stroke="#5eead4", fill="rgba(20,184,166,0.15)"), variant="dna", ai=True) }}
+                {{ m.flow_card(href="#platform-dna", title="DNA Engine", subtitle="Semantic logic", icon=m.engine_icon(stroke="var(--accent-mid)", fill="var(--tint-green)"), variant="dna", ai=True) }}
                 <span class="flow-parallel-pill">parallel</span>
-                {{ m.flow_card(href="#platform-reporting", title="Reporting Engine", subtitle="Portal layout", icon=m.engine_icon(stroke="#fcd34d", fill="rgba(245,158,11,0.15)"), variant="reporting", ai=True) }}
+                {{ m.flow_card(href="#platform-reporting", title="Reporting Engine", subtitle="Portal layout", icon=m.engine_icon(stroke="var(--accent-electric-gold)", fill="var(--tint-amber)"), variant="reporting", ai=True) }}
               </div>
             </div>
           </div>
@@ -101,7 +101,7 @@
 
       <article class="platform-layer" id="platform-dna" data-layer="3">
         <div class="platform-layer-visual">
-          {{ m.platform_emblem(icon=m.engine_icon(stroke="#5eead4", fill="rgba(20,184,166,0.15)"), label="DNA Engine", variant="dna", ai=True) }}
+          {{ m.platform_emblem(icon=m.engine_icon(stroke="var(--accent-mid)", fill="var(--tint-green)"), label="DNA Engine", variant="dna", ai=True) }}
           <div class="mini-pipeline">
             <div class="mini-pipe-node">Customer<br>docs</div>
             <span class="mini-pipe-arrow">→</span>
@@ -128,13 +128,13 @@
 
       <div class="platform-parallel">
         <div class="platform-parallel-card dna">
-          <div class="platform-parallel-emblem">{{ m.engine_icon(stroke="#5eead4", fill="rgba(20,184,166,0.15)") }}</div>
+          <div class="platform-parallel-emblem">{{ m.engine_icon(stroke="var(--accent-mid)", fill="var(--tint-green)") }}</div>
           <strong>DNA Engine</strong>
           <span>Calculations &amp; KPI definitions</span>
         </div>
         <div class="platform-parallel-label">Parallel tracks</div>
         <div class="platform-parallel-card reporting">
-          <div class="platform-parallel-emblem">{{ m.engine_icon(stroke="#fcd34d", fill="rgba(245,158,11,0.15)") }}</div>
+          <div class="platform-parallel-emblem">{{ m.engine_icon(stroke="var(--accent-electric-gold)", fill="var(--tint-amber)") }}</div>
           <strong>Reporting Engine</strong>
           <span>Layout &amp; presentation</span>
         </div>
@@ -142,7 +142,7 @@
 
       <article class="platform-layer" id="platform-reporting" data-layer="4">
         <div class="platform-layer-visual">
-          {{ m.platform_emblem(icon=m.engine_icon(stroke="#fcd34d", fill="rgba(245,158,11,0.15)"), label="Reporting Engine", variant="reporting", ai=True) }}
+          {{ m.platform_emblem(icon=m.engine_icon(stroke="var(--accent-electric-gold)", fill="var(--tint-amber)"), label="Reporting Engine", variant="reporting", ai=True) }}
           <div class="mini-pipeline">
             <div class="mini-pipe-node">Reporting<br>docs</div>
             <span class="mini-pipe-arrow">→</span>
@@ -197,7 +197,7 @@
       <div class="platform-governance-grid">
         <article class="platform-gov-card">
           <h3>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#99f6e4" stroke-width="1.8" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style="stroke:var(--accent-mid)" stroke-width="1.8" aria-hidden="true">
               <circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>
             </svg>
             Scheduled data refresh
@@ -213,7 +213,7 @@
         </article>
         <article class="platform-gov-card">
           <h3>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fcd34d" stroke-width="1.8" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style="stroke:var(--accent-electric-gold)" stroke-width="1.8" aria-hidden="true">
               <path d="M12 3l7 4v5c0 4.5-3 8-7 9-4-1-7-4.5-7-9V7l7-4z"/><path d="M9 12l2 2 4-4"/>
             </svg>
             Governed change requests

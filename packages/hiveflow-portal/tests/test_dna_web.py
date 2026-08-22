@@ -304,7 +304,7 @@ def test_api_gateway_stage_prefix(tmp_path: Path, portal_env: None) -> None:
     response = client.get("/", environ_overrides={"SCRIPT_NAME": "/prod"})
     assert response.status_code == 200
     assert b'href="/prod/pricing"' in response.data
-    assert b'src="/prod/static/hiveflowai-logo.svg"' in response.data
+    assert b'src="/prod/static/hiveflowai-logo.svg?v=' in response.data
 
     client.post(
         "/portal/login",

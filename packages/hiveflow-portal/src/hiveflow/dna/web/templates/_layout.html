@@ -8,6 +8,18 @@
   <title>{{ window_title }} · {{ brand_name }}</title>
   <link rel="icon" href="{{ favicon_url }}" type="image/svg+xml" />
   <link rel="stylesheet" href="{{ css_url }}" />
+  {% raw %}<script>
+  (function () {
+    try {
+      var saved = window.localStorage.getItem("hiveflow-theme");
+      if (saved === "light" || saved === "dark") {
+        document.documentElement.setAttribute("data-theme", saved);
+      }
+    } catch (err) {
+      /* ignore */
+    }
+  })();
+  </script>{% endraw %}
   {% if client_accent %}<style>:root { --accent-mid: {{ client_accent }}; }</style>{% endif %}
 </head>
 <body>
@@ -15,7 +27,8 @@
     <header class="topbar">
       <div class="topbar-inner">
         <a class="brand" href="{{ home_href }}">
-          <img src="{{ icon_url }}" alt="{{ brand_name }} symbol" width="36" height="36" />
+          <img class="brand-icon-light" src="{{ icon_url }}" alt="{{ brand_name }} symbol" width="36" height="36" />
+          <img class="brand-icon-dark" src="{{ icon_url_dark }}" alt="{{ brand_name }} symbol" width="36" height="36" />
           <div class="brand-text">
             <div class="brand-name">hiveflow<span>AI</span></div>
             <div class="brand-tagline">{{ tagline }}</div>
@@ -26,6 +39,9 @@
             <nav class="nav" aria-label="Primary">{% for item in nav_items %}<a class="nav-link{% if item.active %} active{% endif %}" href="{{ item.href }}"{% if item.active %} aria-current="page"{% endif %}>{{ item.label }}</a>
 {% endfor %}</nav>
             {{ topbar_extra }}
+            <button type="button" class="theme-toggle" id="themeToggle" aria-label="Switch to dark theme">
+              <span class="theme-toggle-icon" aria-hidden="true">☾</span>
+            </button>
           </div>
         </div>
       </div>
@@ -57,6 +73,55 @@
     </footer>
 {% endif %}
   </div>
+{% raw %}<script>
+(function () {
+  var STORAGE_KEY = "hiveflow-theme";
+  var root = document.documentElement;
+  var toggle = document.getElementById("themeToggle");
+  if (!toggle) return;
+
+  var media = window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : null;
+
+  function systemPrefersDark() {
+    return !!(media && media.matches);
+  }
+
+  function currentTheme() {
+    var explicit = root.getAttribute("data-theme");
+    if (explicit === "light" || explicit === "dark") return explicit;
+    return systemPrefersDark() ? "dark" : "light";
+  }
+
+  function syncChrome(theme) {
+    toggle.setAttribute(
+      "aria-label",
+      theme === "dark" ? "Switch to light theme" : "Switch to dark theme"
+    );
+    var icon = toggle.querySelector(".theme-toggle-icon");
+    if (icon) icon.textContent = theme === "dark" ? "☀" : "☾";
+    var meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute("content", theme === "dark" ? "#17150F" : "#F1EEE3");
+  }
+
+  syncChrome(currentTheme());
+  if (media && media.addEventListener) {
+    media.addEventListener("change", function () {
+      if (!root.getAttribute("data-theme")) syncChrome(currentTheme());
+    });
+  }
+
+  toggle.addEventListener("click", function () {
+    var next = currentTheme() === "dark" ? "light" : "dark";
+    root.setAttribute("data-theme", next);
+    syncChrome(next);
+    try {
+      window.localStorage.setItem(STORAGE_KEY, next);
+    } catch (err) {
+      /* ignore */
+    }
+  });
+})();
+</script>{% endraw %}
 {% if side_nav %}
 {% raw %}<script>
 (function () {

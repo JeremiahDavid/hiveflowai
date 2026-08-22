@@ -38,6 +38,23 @@ BINARY_STATIC_CONTENT_TYPES = frozenset(
 )
 
 
+def _static_url(url: Callable[[str], str], filename: str) -> str:
+    """Static asset URL with a mtime-based cache-buster.
+
+    Static responses are served with `Cache-Control: no-cache` but no
+    validator (no ETag/Last-Modified), which some browsers still don't
+    reliably revalidate on plain navigation — a stale copy of theme.css
+    (wrong fonts/colors) or a stale layout script otherwise lingers until
+    a hard refresh. Appending the file's mtime makes an edit change the
+    URL itself, which busts any cache unconditionally.
+    """
+    try:
+        version = int((STATIC_DIR / filename).stat().st_mtime)
+    except OSError:
+        version = 0
+    return url(f"/static/{filename}?v={version}")
+
+
 def brand_home_href(url: Callable[[str], str]) -> str:
     """Marketing site root — use primary hostname on reporting subdomains."""
     primary = os.getenv("HIVEFLOW_PRIMARY_SITE_URL", "").strip().rstrip("/")
@@ -208,9 +225,10 @@ def _layout_shell(
         window_title=page_title or title,
         brand_name=BRAND_NAME,
         tagline=TAGLINE,
-        icon_url=url("/static/hiveflowai-logo.svg"),
-        favicon_url=url("/static/hiveflowai-logo-mono.svg"),
-        css_url=url("/static/theme.css"),
+        icon_url=_static_url(url, "hiveflowai-logo.svg"),
+        icon_url_dark=_static_url(url, "hiveflowai-logo-reversed.svg"),
+        favicon_url=_static_url(url, "hiveflowai-logo-mono.svg"),
+        css_url=_static_url(url, "theme.css"),
         client_accent=client_accent,
         home_href=home_href,
         nav_items=_nav_items(active_path, url, nav_links, data_menu=data_menu),
