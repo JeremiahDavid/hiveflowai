@@ -110,9 +110,10 @@ class PlatformAdminStack(Stack):
         CfnOutput(self, "AdminUiFunctionName", value=ui_fn.function_name)
         CfnOutput(self, "AdminSiteUrl", value=f"https://{admin_hostname}/")
         CfnOutput(self, "ApiGatewayUrl", value=self.web_api.url)
+        # Logical id stays WebApiIdV2 — see global_ui_stack.py for why.
         CfnOutput(
             self,
-            "WebApiId",
+            "WebApiIdV2",
             value=self.web_api.rest_api_id,
             export_name=f"hiveflow-platform-admin-{env}-web-api-id",
         )

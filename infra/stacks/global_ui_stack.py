@@ -88,9 +88,12 @@ class GlobalUiStack(Stack):
         CfnOutput(self, "UiFunctionName", value=ui_fn.function_name)
         CfnOutput(self, "SiteUrl", value=site_url)
         CfnOutput(self, "ApiGatewayUrl", value=self.web_api.url)
+        # Logical id stays WebApiIdV2 (not WebApiId) — renaming it back would make
+        # CFN delete-then-recreate the hiveflow-* export while GlobalDnsStack-dev
+        # still imports it by name, hitting the same in-use block this replaced.
         CfnOutput(
             self,
-            "WebApiId",
+            "WebApiIdV2",
             value=self.web_api.rest_api_id,
             export_name=f"hiveflow-global-ui-{environment}-web-api-id",
         )

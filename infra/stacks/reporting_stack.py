@@ -139,11 +139,13 @@ class ReportingStack(Stack):
         CfnOutput(self, "ReportingFunctionName", value=reporting_fn.function_name)
         CfnOutput(self, "ReportingWebUrl", value=reporting_url)
         CfnOutput(self, "ApiGatewayUrl", value=self.web_api.url)
+        # Logical id stays WebApiIdV2 — see global_ui_stack.py for why.
+        reporting_slug = client_id.strip().lower().replace("_", "-")
         CfnOutput(
             self,
-            "WebApiId",
+            "WebApiIdV2",
             value=self.web_api.rest_api_id,
-            export_name=f"hiveflow-reporting-{client_id.strip().lower().replace('_', '-')}-{environment}-web-api-id",
+            export_name=f"hiveflow-reporting-{reporting_slug}-{environment}-web-api-id",
         )
 
     def _apply_cost_allocation_tags(self, client_id: str, company: str, environment: str) -> None:
