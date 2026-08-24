@@ -712,6 +712,125 @@ def render_catalog_table(
     )
 
 
+def render_data_profile_index(
+    request: Request,
+    *,
+    settings: DnaSettings,
+    client: ClientPortalConfig,
+    is_admin: bool = False,
+    configured_sources: list[str] | None = None,
+) -> Response:
+    from hiveflow.dna.web.portal.data_profile_ui.render import render_data_profile_index_page
+    from hiveflow.dna.web.portal.data_profile_ui.service import list_profile_rows
+    from hiveflow.dna.web.portal.dna_nav import DATA_PROFILE_ROOT
+
+    url: Callable[[str], str] = lambda path: f"{request.script_root}{path if path.startswith('/') else f'/{path}'}"
+    rows = list_profile_rows(settings, configured_sources=configured_sources)
+    body = page_header(
+        "Data Profile",
+        "Per-table, per-field profiling stats and Bedrock-generated descriptions — review, re-run, or override.",
+        eyebrow="DNA",
+    )
+    body += render_data_profile_index_page(url=url, rows=rows)
+    return _html_response(
+        request,
+        client=client,
+        title="Data Profile",
+        active_path=DATA_PROFILE_ROOT,
+        body=body,
+        is_admin=is_admin,
+        settings=settings,
+    )
+
+
+def render_data_profile_detail(
+    request: Request,
+    *,
+    settings: DnaSettings,
+    client: ClientPortalConfig,
+    source: str,
+    entity: str,
+    is_admin: bool = False,
+    message: str = "",
+    error: str = "",
+) -> Response:
+    from hiveflow.dna.web.portal.data_profile_ui.render import render_data_profile_detail_page
+    from hiveflow.dna.web.portal.data_profile_ui.service import load_profile
+    from hiveflow.dna.web.portal.dna_nav import DATA_PROFILE_ROOT
+
+    url: Callable[[str], str] = lambda path: f"{request.script_root}{path if path.startswith('/') else f'/{path}'}"
+    profile = load_profile(settings, source, entity)
+    body = page_header(f"{source}.{entity}", "Data profile", eyebrow="DNA · Data Profile")
+    if message:
+        body += empty_state(message, "")
+    if error:
+        body += empty_state("Error", error)
+    body += render_data_profile_detail_page(url=url, source=source, entity=entity, profile=profile)
+    return _html_response(
+        request,
+        client=client,
+        title=f"{source}.{entity}",
+        active_path=DATA_PROFILE_ROOT,
+        body=body,
+        is_admin=is_admin,
+        settings=settings,
+    )
+
+
+def render_model_mapping(
+    request: Request,
+    *,
+    settings: DnaSettings,
+    client: ClientPortalConfig,
+    is_admin: bool = False,
+    entity: str = "",
+    promote_report: dict[str, Any] | None = None,
+    message: str = "",
+    error: str = "",
+) -> Response:
+    from hiveflow.dna.web.portal.dna_nav import MODEL_MAPPING_ROOT
+    from hiveflow.dna.web.portal.model_mapping.render import render_model_mapping_page
+    from hiveflow.dna.web.portal.model_mapping.service import (
+        available_templates,
+        load_current_mapping,
+        load_template_for,
+    )
+    from hiveflow.dna.industry_mapping import mapping_completion
+
+    url: Callable[[str], str] = lambda path: f"{request.script_root}{path if path.startswith('/') else f'/{path}'}"
+    mapping = load_current_mapping(settings)
+    template = load_template_for(mapping) if mapping is not None else None
+    completion = mapping_completion(mapping, template) if mapping is not None else None
+
+    body = page_header(
+        "Model Mapping",
+        "Bind this client's profiled data onto an industry data model, approve field mappings, and promote to a governed DefinitionPack.",
+        eyebrow="DNA",
+    )
+    if message:
+        body += empty_state(message, "")
+    if error:
+        body += empty_state("Error", error)
+    body += render_model_mapping_page(
+        url=url,
+        mapping=mapping,
+        template=template,
+        completion=completion,
+        selected_entity=entity,
+        promote_report=promote_report,
+        available=available_templates(),
+    )
+    return _html_response(
+        request,
+        client=client,
+        title="Model Mapping",
+        active_path=MODEL_MAPPING_ROOT,
+        body=body,
+        is_admin=is_admin,
+        settings=settings,
+    )
+
+
 def render_catalog_gold(
     request: Request,
     *,

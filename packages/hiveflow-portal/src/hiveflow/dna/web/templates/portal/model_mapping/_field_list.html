@@ -1,0 +1,53 @@
+<div class="section-title">Fields — {{ entity_id }}</div>
+<table class="semantic-builder-table">
+  <thead>
+    <tr>
+      <th>Field</th>
+      <th>Silver column</th>
+      <th>Confidence</th>
+      <th>Status</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in fields %}
+    <tr>
+      <td><code>{{ row.field_id }}</code>{% if row.display_name %} — {{ row.display_name }}{% endif %}{% if row.required %} *{% endif %}</td>
+      <td>
+        <form method="post" action="{{ action_url }}" class="mapping-field-form">
+          <input type="hidden" name="action" value="approve_field" />
+          <input type="hidden" name="entity_id" value="{{ entity_id }}" />
+          <input type="hidden" name="field_id" value="{{ row.field_id }}" />
+          <input type="text" name="silver_column" value="{{ row.silver_column }}" class="mapping-column-input" />
+          <button type="submit" class="btn btn-primary">Approve</button>
+        </form>
+      </td>
+      <td>{{ row.confidence }}</td>
+      <td><span class="badge{% if row.status == 'approved' %} accent{% endif %}">{{ row.status }}</span></td>
+      <td>
+        <form method="post" action="{{ action_url }}" class="mapping-field-form">
+          <input type="hidden" name="action" value="reject_field" />
+          <input type="hidden" name="entity_id" value="{{ entity_id }}" />
+          <input type="hidden" name="field_id" value="{{ row.field_id }}" />
+          <button type="submit" class="btn btn-secondary">Reject</button>
+        </form>
+        <form method="post" action="{{ action_url }}" class="mapping-field-form">
+          <input type="hidden" name="action" value="exclude_field" />
+          <input type="hidden" name="entity_id" value="{{ entity_id }}" />
+          <input type="hidden" name="field_id" value="{{ row.field_id }}" />
+          <button type="submit" class="btn btn-secondary">Remove</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<div class="section-title">Add a client-specific field</div>
+<form method="post" action="{{ action_url }}" class="mapping-add-field-form">
+  <input type="hidden" name="action" value="add_field" />
+  <input type="hidden" name="entity_id" value="{{ entity_id }}" />
+  <input type="text" name="field_id" placeholder="field id" required />
+  <input type="text" name="silver_column" placeholder="silver column" required />
+  <button type="submit" class="btn btn-secondary">Add field</button>
+</form>

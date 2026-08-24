@@ -1,0 +1,41 @@
+{% if not rows %}
+<p class="muted">No candidate tables discovered yet — sync a connector or approve a spreadsheet table first.</p>
+{% else %}
+<table class="semantic-builder-table">
+  <thead>
+    <tr>
+      <th>Source</th>
+      <th>Table</th>
+      <th>Status</th>
+      <th>Purpose</th>
+      <th>Rows</th>
+      <th>Last profiled</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in rows %}
+    <tr>
+      <td>{{ row.source }}</td>
+      <td>
+        {% if row.profiled %}<a href="{{ row.detail_url }}"><code>{{ row.entity }}</code></a>
+        {% else %}<code>{{ row.entity }}</code>
+        {% endif %}
+      </td>
+      <td>{{ 'Profiled' if row.profiled else 'Not profiled' }}</td>
+      <td>{{ row.purpose or '—' }}</td>
+      <td>{{ row.row_count }}</td>
+      <td>{{ row.last_profiled_at or '—' }}</td>
+      <td>
+        {% if not row.profiled %}
+        <form method="post" action="{{ row.detail_url }}">
+          <input type="hidden" name="action" value="refresh_entity" />
+          <button type="submit" class="btn btn-secondary">Profile now</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}

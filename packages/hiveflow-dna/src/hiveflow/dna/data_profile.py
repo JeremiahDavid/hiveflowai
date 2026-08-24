@@ -100,7 +100,7 @@ def _heuristic_description(
     }
 
 
-def _scoped_settings(settings: DnaSettings, source: str) -> DnaSettings:
+def scoped_settings(settings: DnaSettings, source: str) -> DnaSettings:
     """Settings for reading a lake entity that may live under a different source
     than `settings.source` (e.g. Spreadsheet Engine's `reference` tables)."""
     if source.strip().lower() == settings.source.strip().lower():
@@ -122,7 +122,7 @@ def sample_entity_rows(
     limit: int = DEFAULT_SAMPLE_LIMIT,
 ) -> list[dict[str, Any]]:
     """Sample up to `limit` rows from a lake entity (any source, silver or silver_stg)."""
-    scoped = _scoped_settings(settings, source)
+    scoped = scoped_settings(settings, source)
     reader = read_silver_stg_entity if layer == "silver_stg" else read_silver_entity
     rows = reader(scoped, entity)
     return rows[: max(1, limit)]
@@ -240,6 +240,44 @@ def load_entity_profile(settings: DnaSettings, source: str, entity: str) -> dict
     return read_yaml_artifact(settings, governance_data_profile_entity_key(pack_id, source, entity))
 
 
+def update_profile_text(
+    settings: DnaSettings,
+    source: str,
+    entity: str,
+    *,
+    purpose: str | None = None,
+    field_descriptions: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    """Manually override the purpose/field descriptions on an existing profile
+    document, without re-sampling or re-invoking Bedrock. Marks edited text
+    with a `*_edited` flag so the UI can distinguish a human override from raw
+    Bedrock output — a later `profile_entity` re-run replaces both."""
+    profile = load_entity_profile(settings, source, entity)
+    if profile is None:
+        raise ValueError(f"No profile exists yet for {source}.{entity} — profile it first.")
+
+    if purpose is not None:
+        profile["purpose"] = purpose
+        profile["purpose_edited"] = True
+
+    if field_descriptions:
+        by_name = {str(col.get("name")): col for col in profile.get("fields") or []}
+        for name, description in field_descriptions.items():
+            col = by_name.get(name)
+            if col is None:
+                continue
+            col["description"] = description
+            col["description_edited"] = True
+
+    write_yaml_artifact(
+        settings,
+        governance_data_profile_entity_key(settings.dna_config_id, source, entity),
+        profile,
+    )
+    _update_index(settings, profile)
+    return profile
+
+
 def refresh_data_profile_for_source(
     settings: DnaSettings,
     source: str,
@@ -257,7 +295,7 @@ def refresh_data_profile_for_source(
     """
     from hiveflow.dna.field_semantics import list_lake_silver_stg_entities
 
-    scoped = _scoped_settings(settings, source)
+    scoped = scoped_settings(settings, source)
     target_entities = entities if entities is not None else list_lake_silver_stg_entities(scoped)
     profiled: list[dict[str, Any]] = []
     errors: list[dict[str, str]] = []

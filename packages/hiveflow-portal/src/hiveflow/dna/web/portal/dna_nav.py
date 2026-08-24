@@ -14,10 +14,14 @@ from hiveflow.dna.web.portal.catalog import (
 DNA_ROOT = "/portal/dna"
 KPI_GENERATOR_ROOT = f"{DNA_ROOT}/kpi-generator"
 SOURCE_DOCS_INSPECTOR_ROOT = "/portal/semantics/source-docs"
+DATA_PROFILE_ROOT = f"{DNA_ROOT}/data-profile"
+MODEL_MAPPING_ROOT = f"{DNA_ROOT}/model-mapping"
 
 _SOURCE_BROWSER_LABEL = "Source Browser"
 _KPI_GENERATOR_LABEL = "DNA Engine"
 _DNA_CATALOG_LABEL = "DNA Catalog"
+_DATA_PROFILE_LABEL = "Data Profile"
+_MODEL_MAPPING_LABEL = "Model Mapping"
 
 SideNavItem = tuple[str, str] | tuple[str, str, tuple[Any, ...]]
 
@@ -55,6 +59,8 @@ def dna_section_nav(settings: DnaSettings | None) -> tuple[Any, ...]:
             (SOURCE_DOCS_INSPECTOR_ROOT, _SOURCE_BROWSER_LABEL),
             (KPI_GENERATOR_ROOT, _KPI_GENERATOR_LABEL),
             (CATALOG_ROOT, _DNA_CATALOG_LABEL),
+            (DATA_PROFILE_ROOT, _DATA_PROFILE_LABEL),
+            (MODEL_MAPPING_ROOT, _MODEL_MAPPING_LABEL),
         )
 
     catalog_children = _catalog_nav_children(settings)
@@ -67,4 +73,6 @@ def dna_section_nav(settings: DnaSettings | None) -> tuple[Any, ...]:
         (SOURCE_DOCS_INSPECTOR_ROOT, _SOURCE_BROWSER_LABEL),
         (KPI_GENERATOR_ROOT, _KPI_GENERATOR_LABEL),
         catalog_item,
+        (DATA_PROFILE_ROOT, _DATA_PROFILE_LABEL),
+        (MODEL_MAPPING_ROOT, _MODEL_MAPPING_LABEL),
     )

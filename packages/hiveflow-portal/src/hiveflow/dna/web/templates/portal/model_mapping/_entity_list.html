@@ -1,0 +1,55 @@
+<div class="profile-meta muted">
+  Industry: {{ industry_pack_id }} v{{ industry_version }} · overall {{ overall_percent }}% complete
+</div>
+<table class="semantic-builder-table">
+  <thead>
+    <tr>
+      <th>Entity</th>
+      <th>Silver binding</th>
+      <th>% complete</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in entities %}
+    <tr>
+      <td>
+        <a href="{{ row.view_url }}"><code>{{ row.entity_id }}</code></a>
+        {% if not row.included %}<span class="badge">excluded</span>{% endif %}
+      </td>
+      <td>{{ row.silver_binding or '—' }}</td>
+      <td>{{ row.percent }}% ({{ row.approved }}/{{ row.required }})</td>
+      <td>
+        <form method="post" action="{{ action_url }}" class="mapping-bulk-form">
+          <input type="hidden" name="action" value="approve_all" />
+          <input type="hidden" name="entity_id" value="{{ row.entity_id }}" />
+          <button type="submit" class="btn btn-primary">Approve all</button>
+        </form>
+        <form method="post" action="{{ action_url }}" class="mapping-bulk-form">
+          <input type="hidden" name="action" value="reject_all" />
+          <input type="hidden" name="entity_id" value="{{ row.entity_id }}" />
+          <button type="submit" class="btn btn-secondary">Reject all</button>
+        </form>
+        {% if row.included %}
+        <form method="post" action="{{ action_url }}" class="mapping-bulk-form">
+          <input type="hidden" name="action" value="exclude_entity" />
+          <input type="hidden" name="entity_id" value="{{ row.entity_id }}" />
+          <button type="submit" class="btn btn-secondary">Exclude table</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<div class="section-title">Add a client-specific entity</div>
+<form method="post" action="{{ action_url }}" class="mapping-add-entity-form">
+  <input type="hidden" name="action" value="add_entity" />
+  <input type="text" name="entity_id" placeholder="entity id" required />
+  <input type="text" name="silver_source" placeholder="silver source" required />
+  <input type="text" name="silver_entity" placeholder="silver entity" required />
+  <input type="text" name="field_id" placeholder="first field id" required />
+  <input type="text" name="silver_column" placeholder="first field silver column" required />
+  <button type="submit" class="btn btn-secondary">Add entity</button>
+</form>

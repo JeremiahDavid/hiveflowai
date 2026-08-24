@@ -1,0 +1,55 @@
+{% if notes %}
+<ul class="profile-notes">
+  {% for note in notes %}<li>{{ note }}</li>{% endfor %}
+</ul>
+{% endif %}
+<div class="profile-meta muted">
+  {{ row_count }} rows sampled · confidence {{ confidence }}
+  {% if purpose_edited %} · <span class="badge accent">purpose edited</span>{% endif %}
+  {% if last_profiled_at %} · last profiled {{ last_profiled_at }}{% endif %}
+</div>
+
+<form method="post" action="{{ action_url }}" class="profile-overrides-form">
+  <input type="hidden" name="action" value="save_overrides" />
+  <div class="section-title">Purpose</div>
+  <textarea name="purpose" rows="2" class="profile-purpose-input">{{ purpose }}</textarea>
+
+  <div class="section-title">Fields</div>
+  <table class="semantic-builder-table">
+    <thead>
+      <tr>
+        <th>Field</th>
+        <th>Type</th>
+        <th>Null %</th>
+        <th>Cardinality</th>
+        <th>Key?</th>
+        <th>Patterns</th>
+        <th>Description (Bedrock)</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in fields %}
+      <tr>
+        <td><code>{{ row.name }}</code></td>
+        <td>{{ row.type }}</td>
+        <td>{{ row.null_rate }}</td>
+        <td>{{ row.cardinality }}</td>
+        <td>{{ 'yes' if row.is_key else '' }}</td>
+        <td>{{ row.patterns }}</td>
+        <td>
+          <textarea name="description__{{ row.name }}" rows="2" class="profile-description-input">{{ row.description }}</textarea>
+          {% if row.description_edited %}<span class="badge accent">edited</span>{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <div class="profile-overrides-actions">
+    <button type="submit" class="btn btn-primary">Save overrides</button>
+  </div>
+</form>
+
+<form method="post" action="{{ action_url }}" class="profile-refresh-form">
+  <input type="hidden" name="action" value="refresh_entity" />
+  <button type="submit" class="btn btn-secondary">Re-run Bedrock</button>
+</form>

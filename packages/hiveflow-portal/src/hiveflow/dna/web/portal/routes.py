@@ -81,6 +81,10 @@ REPORTING_UI_ENDPOINTS = frozenset(
         "portal_dna",
         "portal_dna_kpi_generator",
         "portal_dna_kpi_generator_status",
+        "portal_data_profile",
+        "portal_data_profile_source_refresh",
+        "portal_data_profile_entity",
+        "portal_model_mapping",
         "portal_governance",
         "portal_governance_users",
         "portal_governance_config",
@@ -286,6 +290,22 @@ def build_portal_routes(
                 Rule("/portal/catalog/gold", endpoint="portal_catalog_gold"),
                 Rule("/portal/catalog", endpoint="portal_catalog"),
                 Rule("/portal/catalog/<output_id>", endpoint="portal_catalog_output"),
+                Rule("/portal/dna/data-profile", endpoint="portal_data_profile"),
+                Rule(
+                    "/portal/dna/data-profile/<source>/refresh",
+                    endpoint="portal_data_profile_source_refresh",
+                    methods=["POST"],
+                ),
+                Rule(
+                    "/portal/dna/data-profile/<source>/<entity>",
+                    endpoint="portal_data_profile_entity",
+                    methods=["GET", "POST"],
+                ),
+                Rule(
+                    "/portal/dna/model-mapping",
+                    endpoint="portal_model_mapping",
+                    methods=["GET", "POST"],
+                ),
                 Rule("/portal/governance", endpoint="portal_governance", methods=["GET", "POST"]),
                 Rule(
                     "/portal/governance/users",
@@ -899,6 +919,195 @@ def build_portal_routes(
             client=client,
             output_id=output_id,
             is_admin=_portal_is_admin(session.username),
+        )
+
+    def on_portal_data_profile(request: Request) -> Response:
+        session, redirect = _authorized(request)
+        if redirect is not None:
+            return redirect
+        from hiveflow.dna.web.portal.views import render_data_profile_index
+
+        client = _client_config(_portal_client_id(session))
+        return render_data_profile_index(
+            request,
+            settings=settings,
+            client=client,
+            is_admin=_portal_is_admin(session.username),
+            configured_sources=_configured_reference_sources(settings),
+        )
+
+    def on_portal_data_profile_source_refresh(request: Request, source: str) -> Response:
+        session, redirect = _authorized(request)
+        if redirect is not None:
+            return redirect
+        if not _portal_is_admin(session.username):
+            return Response("Forbidden", status=403, mimetype="text/plain")
+        from hiveflow.dna.web.portal.data_profile_ui.service import refresh_source
+
+        try:
+            result = refresh_source(settings, source)
+            params = {"msg": f"Re-profiled {result.get('profiled_count', 0)} table(s) in {source}."}
+        except Exception as exc:  # noqa: BLE001
+            params = {"err": str(exc)}
+        return _redirect(request, f"/portal/dna/data-profile?{urlencode(params)}")
+
+    def on_portal_data_profile_entity(request: Request, source: str, entity: str) -> Response:
+        session, redirect = _authorized(request)
+        if redirect is not None:
+            return redirect
+        from hiveflow.dna.web.portal.views import render_data_profile_detail
+
+        client = _client_config(_portal_client_id(session))
+        is_admin = _portal_is_admin(session.username)
+
+        if request.method == "POST":
+            if not is_admin:
+                return Response("Forbidden", status=403, mimetype="text/plain")
+            from hiveflow.dna.web.portal.data_profile_ui.service import refresh_entity, save_overrides
+
+            action = str(request.form.get("action") or "").strip()
+            try:
+                if action == "refresh_entity":
+                    refresh_entity(settings, source, entity)
+                    params = {"msg": "Re-ran Bedrock for this table."}
+                elif action == "save_overrides":
+                    purpose = request.form.get("purpose")
+                    field_descriptions = {
+                        key[len("description__") :]: value
+                        for key, value in request.form.items()
+                        if key.startswith("description__")
+                    }
+                    save_overrides(
+                        settings,
+                        source,
+                        entity,
+                        purpose=str(purpose) if purpose is not None else None,
+                        field_descriptions=field_descriptions,
+                    )
+                    params = {"msg": "Saved manual overrides."}
+                else:
+                    params = {"err": f"Unknown action {action!r}"}
+            except ValueError as exc:
+                params = {"err": str(exc)}
+            return _redirect(
+                request, f"/portal/dna/data-profile/{source}/{entity}?{urlencode(params)}"
+            )
+
+        return render_data_profile_detail(
+            request,
+            settings=settings,
+            client=client,
+            source=source,
+            entity=entity,
+            is_admin=is_admin,
+            message=str(request.args.get("msg") or ""),
+            error=str(request.args.get("err") or ""),
+        )
+
+    def on_portal_model_mapping(request: Request) -> Response:
+        session, redirect = _authorized(request)
+        if redirect is not None:
+            return redirect
+        from hiveflow.dna.web.portal.views import render_model_mapping
+
+        client = _client_config(_portal_client_id(session))
+        is_admin = _portal_is_admin(session.username)
+        entity_param = str(request.args.get("entity") or "").strip()
+
+        if request.method == "POST":
+            if not is_admin:
+                return Response("Forbidden", status=403, mimetype="text/plain")
+            from hiveflow.dna.web.portal.model_mapping import service as mapping_service
+
+            action = str(request.form.get("action") or "").strip()
+            entity_id = str(request.form.get("entity_id") or "").strip()
+            params: dict[str, str] = {}
+            try:
+                if action == "init":
+                    mapping_service.initialize(
+                        settings, str(request.form.get("industry_pack_id") or "").strip()
+                    )
+                    params = {"msg": "Mapping initialized from industry template."}
+                elif action == "approve_field":
+                    mapping_service.approve_field(
+                        settings,
+                        entity_id=entity_id,
+                        field_id=str(request.form.get("field_id") or "").strip(),
+                        silver_column=str(request.form.get("silver_column") or "").strip() or None,
+                    )
+                    params = {"msg": "Field approved.", "entity": entity_id}
+                elif action == "reject_field":
+                    mapping_service.reject_field(
+                        settings,
+                        entity_id=entity_id,
+                        field_id=str(request.form.get("field_id") or "").strip(),
+                    )
+                    params = {"msg": "Field rejected.", "entity": entity_id}
+                elif action == "approve_all":
+                    mapping_service.approve_all(settings, entity_id=entity_id or None)
+                    params = {"msg": "Approved all suggested fields.", "entity": entity_id}
+                elif action == "reject_all":
+                    mapping_service.reject_all(settings, entity_id=entity_id or None)
+                    params = {"msg": "Rejected all fields.", "entity": entity_id}
+                elif action == "exclude_entity":
+                    mapping_service.exclude_entity(settings, entity_id=entity_id)
+                    params = {"msg": f"Excluded entity {entity_id}."}
+                elif action == "exclude_field":
+                    mapping_service.exclude_field(
+                        settings,
+                        entity_id=entity_id,
+                        field_id=str(request.form.get("field_id") or "").strip(),
+                    )
+                    params = {"msg": "Field removed.", "entity": entity_id}
+                elif action == "add_entity":
+                    mapping_service.add_custom_entity(
+                        settings,
+                        entity_id=entity_id,
+                        silver_source=str(request.form.get("silver_source") or "").strip(),
+                        silver_entity=str(request.form.get("silver_entity") or "").strip(),
+                        field_id=str(request.form.get("field_id") or "").strip(),
+                        silver_column=str(request.form.get("silver_column") or "").strip(),
+                    )
+                    params = {"msg": "Custom entity added."}
+                elif action == "add_field":
+                    mapping_service.add_custom_field(
+                        settings,
+                        entity_id=entity_id,
+                        field_id=str(request.form.get("field_id") or "").strip(),
+                        silver_column=str(request.form.get("silver_column") or "").strip(),
+                    )
+                    params = {"msg": "Custom field added.", "entity": entity_id}
+                elif action == "promote":
+                    result = mapping_service.promote(
+                        settings, version=str(request.form.get("version") or "").strip()
+                    )
+                    report = result["report"]
+                    included = ", ".join(report["included_kpis"]) or "none"
+                    skipped = "; ".join(
+                        f"{item['kpi_id']} ({item['reason']})" for item in report["skipped_kpis"]
+                    ) or "none"
+                    params = {
+                        "msg": (
+                            f"Promoted {result['pack'].pack_id} v{result['pack'].version} — "
+                            f"included: {included} — skipped: {skipped}"
+                        )
+                    }
+                else:
+                    params = {"err": f"Unknown action {action!r}"}
+            except ValueError as exc:
+                params = {"err": str(exc)}
+                if entity_id:
+                    params["entity"] = entity_id
+            return _redirect(request, f"/portal/dna/model-mapping?{urlencode(params)}")
+
+        return render_model_mapping(
+            request,
+            settings=settings,
+            client=client,
+            is_admin=is_admin,
+            entity=entity_param,
+            message=str(request.args.get("msg") or ""),
+            error=str(request.args.get("err") or ""),
         )
 
     def on_portal_governance_config(request: Request) -> Response:
@@ -2352,6 +2561,10 @@ def build_portal_routes(
         "portal_dna": on_portal_dna,
         "portal_dna_kpi_generator": on_portal_dna_kpi_generator,
         "portal_dna_kpi_generator_status": on_portal_dna_kpi_generator_status,
+        "portal_data_profile": on_portal_data_profile,
+        "portal_data_profile_source_refresh": on_portal_data_profile_source_refresh,
+        "portal_data_profile_entity": on_portal_data_profile_entity,
+        "portal_model_mapping": on_portal_model_mapping,
         "portal_governance": on_portal_governance,
         "portal_governance_users": on_portal_governance_users,
         "portal_governance_config": on_portal_governance_config,

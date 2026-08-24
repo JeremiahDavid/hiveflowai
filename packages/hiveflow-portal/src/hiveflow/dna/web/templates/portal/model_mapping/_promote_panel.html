@@ -1,0 +1,17 @@
+<div class="section-title">Promote to DefinitionPack</div>
+<form method="post" action="{{ action_url }}">
+  <input type="hidden" name="action" value="promote" />
+  <input type="text" name="version" placeholder="version, e.g. 1.0.0" required />
+  <button type="submit" class="btn btn-primary">Promote</button>
+</form>
+
+{% if report %}
+<div class="profile-meta muted">Included KPIs: {{ report.included_kpis | join(', ') if report.included_kpis else '—' }}</div>
+{% if report.skipped_kpis %}
+<ul class="profile-notes">
+  {% for item in report.skipped_kpis %}
+  <li>Skipped <code>{{ item.kpi_id }}</code> — {{ item.reason }}</li>
+  {% endfor %}
+</ul>
+{% endif %}
+{% endif %}
