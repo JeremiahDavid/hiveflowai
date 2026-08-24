@@ -241,6 +241,11 @@ def governance_semantic_model_manifest_key(pack_id: str, version: str) -> str:
     return f"{governance_semantic_model_version_prefix(pack_id, version)}/manifest.json"
 
 
+def governance_model_mapping_key(pack_id: str) -> str:
+    """Per-client industry template mapping — single mutable document."""
+    return f"{governance_pack_prefix(pack_id)}/model_mapping.yaml"
+
+
 def governance_data_profile_prefix(pack_id: str) -> str:
     """Per-client data profiling / description metadata (all sources, all entities)."""
     return f"{governance_pack_prefix(pack_id)}/data_profile"

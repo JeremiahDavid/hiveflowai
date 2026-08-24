@@ -1,0 +1,329 @@
+pack_id: dental
+version: 1.0.0
+status: draft
+description: >
+  Dental practice / DSO industry data model — patient care delivery, production,
+  and payer billing. See docs/product-vision.md for the vertical rationale.
+
+entities:
+  - id: patient
+    display_name: Patient
+    grain: one row per patient
+    primary_key: patient_key
+    required: true
+    description: A person receiving care at the practice.
+    fields:
+      - id: patient_key
+        display_name: Patient ID
+        type: string
+        required: true
+        description: Stable patient identifier.
+      - id: first_name
+        display_name: First Name
+        type: string
+      - id: last_name
+        display_name: Last Name
+        type: string
+      - id: date_of_birth
+        display_name: Date of Birth
+        type: date
+      - id: status
+        display_name: Status
+        type: string
+        description: "active | inactive"
+
+  - id: provider
+    display_name: Provider
+    grain: one row per provider
+    primary_key: provider_key
+    required: true
+    description: A dentist or hygienist delivering care.
+    fields:
+      - id: provider_key
+        display_name: Provider ID
+        type: string
+        required: true
+      - id: name
+        display_name: Name
+        type: string
+        required: true
+      - id: provider_type
+        display_name: Provider Type
+        type: string
+        description: "dentist | hygienist"
+      - id: npi
+        display_name: NPI
+        type: string
+
+  - id: appointment
+    display_name: Appointment
+    grain: one row per scheduled appointment
+    primary_key: appointment_key
+    required: true
+    fields:
+      - id: appointment_key
+        display_name: Appointment ID
+        type: string
+        required: true
+      - id: patient_id
+        display_name: Patient
+        type: string
+        required: true
+        description: References patient.patient_key.
+      - id: provider_id
+        display_name: Provider
+        type: string
+        required: true
+        description: References provider.provider_key.
+      - id: appointment_date
+        display_name: Appointment Date
+        type: date
+        required: true
+      - id: appointment_type
+        display_name: Appointment Type
+        type: string
+        description: "hygiene | exam | procedure | other"
+      - id: status
+        display_name: Status
+        type: string
+        description: "scheduled | completed | cancelled | no_show"
+      - id: rebooked
+        display_name: Rebooked
+        type: boolean
+        description: Whether a follow-up recall appointment was booked at checkout.
+
+  - id: procedure
+    display_name: Procedure
+    grain: one row per procedure performed or proposed
+    primary_key: procedure_key
+    required: true
+    fields:
+      - id: procedure_key
+        display_name: Procedure ID
+        type: string
+        required: true
+      - id: appointment_id
+        display_name: Appointment
+        type: string
+        description: References appointment.appointment_key.
+      - id: patient_id
+        display_name: Patient
+        type: string
+        required: true
+        description: References patient.patient_key.
+      - id: provider_id
+        display_name: Provider
+        type: string
+        required: true
+        description: References provider.provider_key.
+      - id: procedure_code
+        display_name: Procedure Code
+        type: string
+        description: CDT code.
+      - id: procedure_date
+        display_name: Procedure Date
+        type: date
+        required: true
+      - id: amount
+        display_name: Amount
+        type: currency
+        required: true
+      - id: status
+        display_name: Status
+        type: string
+        description: "proposed | completed | declined"
+      - id: case_presented
+        display_name: Case Presented
+        type: boolean
+        description: Whether this procedure was presented to the patient as a treatment plan.
+      - id: case_accepted
+        display_name: Case Accepted
+        type: boolean
+        description: Whether the patient accepted the presented treatment plan.
+
+  - id: claim
+    display_name: Claim
+    grain: one row per insurance claim
+    primary_key: claim_key
+    fields:
+      - id: claim_key
+        display_name: Claim ID
+        type: string
+        required: true
+      - id: procedure_id
+        display_name: Procedure
+        type: string
+        required: true
+        description: References procedure.procedure_key.
+      - id: payer_name
+        display_name: Payer
+        type: string
+        required: true
+      - id: claim_date
+        display_name: Claim Date
+        type: date
+      - id: billed_amount
+        display_name: Billed Amount
+        type: currency
+      - id: paid_amount
+        display_name: Paid Amount
+        type: currency
+      - id: status
+        display_name: Status
+        type: string
+        description: "submitted | paid | denied"
+
+  - id: production
+    display_name: Production
+    grain: one row per patient visit
+    primary_key: production_key
+    fields:
+      - id: production_key
+        display_name: Production ID
+        type: string
+        required: true
+      - id: provider_id
+        display_name: Provider
+        type: string
+        required: true
+        description: References provider.provider_key.
+      - id: patient_id
+        display_name: Patient
+        type: string
+        description: References patient.patient_key.
+      - id: production_date
+        display_name: Production Date
+        type: date
+        required: true
+      - id: amount
+        display_name: Amount
+        type: currency
+        required: true
+
+joins:
+  - id: appointment_to_patient
+    left_entity: appointment
+    right_entity: patient
+    left_key: patient_id
+    right_key: patient_key
+    cardinality: many_to_one
+  - id: appointment_to_provider
+    left_entity: appointment
+    right_entity: provider
+    left_key: provider_id
+    right_key: provider_key
+    cardinality: many_to_one
+  - id: procedure_to_appointment
+    left_entity: procedure
+    right_entity: appointment
+    left_key: appointment_id
+    right_key: appointment_key
+    cardinality: many_to_one
+  - id: procedure_to_patient
+    left_entity: procedure
+    right_entity: patient
+    left_key: patient_id
+    right_key: patient_key
+    cardinality: many_to_one
+  - id: procedure_to_provider
+    left_entity: procedure
+    right_entity: provider
+    left_key: provider_id
+    right_key: provider_key
+    cardinality: many_to_one
+  - id: claim_to_procedure
+    left_entity: claim
+    right_entity: procedure
+    left_key: procedure_id
+    right_key: procedure_key
+    cardinality: many_to_one
+  - id: production_to_provider
+    left_entity: production
+    right_entity: provider
+    left_key: provider_id
+    right_key: provider_key
+    cardinality: many_to_one
+
+calendar:
+  id: dental_calendar
+  type: calendar_year
+  date_field: procedure.procedure_date
+  period_grain: month
+
+kpis:
+  - id: production_per_visit
+    name: Production per Visit
+    description: Average production amount recorded per patient visit.
+    entity_id: production
+    formula_type: avg
+    value_field: amount
+    group_by: [provider_id]
+    format:
+      type: currency
+      decimal_places: 2
+
+  - id: hygiene_reappointment_rate
+    name: Hygiene Reappointment Rate
+    description: Share of hygiene appointments where the patient rebooked at checkout.
+    entity_id: appointment
+    formula_type: ratio
+    filter_field: appointment_type
+    filter_value: hygiene
+    numerator_kpi: _hygiene_rebooked_count
+    denominator_kpi: _hygiene_total_count
+    format:
+      type: percent
+      decimal_places: 1
+
+  - id: _hygiene_rebooked_count
+    name: Hygiene Rebooked Count
+    description: Component KPI — hygiene appointments rebooked at checkout.
+    entity_id: appointment
+    formula_type: count
+    filter_field: rebooked
+    filter_value: true
+
+  - id: _hygiene_total_count
+    name: Hygiene Total Count
+    description: Component KPI — total hygiene appointments.
+    entity_id: appointment
+    formula_type: count
+
+  - id: case_acceptance_rate
+    name: Case Acceptance Rate
+    description: Share of presented treatment plans the patient accepted.
+    entity_id: procedure
+    formula_type: ratio
+    numerator_kpi: _case_accepted_count
+    denominator_kpi: _case_presented_count
+    format:
+      type: percent
+      decimal_places: 1
+
+  - id: _case_accepted_count
+    name: Case Accepted Count
+    description: Component KPI — procedures accepted by the patient.
+    entity_id: procedure
+    formula_type: count
+    filter_field: case_accepted
+    filter_value: true
+
+  - id: _case_presented_count
+    name: Case Presented Count
+    description: Component KPI — procedures presented as a treatment plan.
+    entity_id: procedure
+    formula_type: count
+    filter_field: case_presented
+    filter_value: true
+
+  - id: ar_aging_by_payer
+    name: AR Aging by Payer
+    description: >
+      Outstanding claim balance by payer, bucketed by days outstanding. Needs
+      aging-bucket and date-math logic beyond this template's formula
+      vocabulary — author via KPI Generator against the mapped claim entity.
+    entity_id: claim
+    formula_type: sum
+    value_field: billed_amount
+    group_by: [payer_name]
+    auto_materializable: false

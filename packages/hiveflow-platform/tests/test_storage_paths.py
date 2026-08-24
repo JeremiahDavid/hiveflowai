@@ -14,6 +14,7 @@ from hiveflow.storage.paths import (
     governance_field_semantics_prefix,
     governance_field_semantics_workflow_key,
     governance_manifest_key,
+    governance_model_mapping_key,
     governance_pack_prefix,
     governance_prefix,
     governance_reporting_key,
@@ -56,6 +57,10 @@ def test_governance_data_profile_entity_key_requires_source_and_entity() -> None
         governance_data_profile_entity_key("poc_dna_config", "", "customers")
     with pytest.raises(ValueError):
         governance_data_profile_entity_key("poc_dna_config", "qbo", "")
+
+
+def test_governance_model_mapping_key() -> None:
+    assert governance_model_mapping_key("poc_dna_config") == "governance/poc_dna_config/model_mapping.yaml"
 
 
 def test_governance_data_profile_index_key() -> None:

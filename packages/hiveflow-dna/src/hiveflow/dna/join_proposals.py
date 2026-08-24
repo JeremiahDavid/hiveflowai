@@ -2,31 +2,14 @@
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass, field
 from typing import Any
 
+from hiveflow.dna._text_match import column_lookup as _column_lookup
+from hiveflow.dna._text_match import norm as _norm
+from hiveflow.dna._text_match import stems as _stems
+from hiveflow.dna._text_match import tokens as _tokens
 from hiveflow.dna.settings import DnaSettings
-
-_STOPWORDS = frozenset(
-    {
-        "a",
-        "an",
-        "by",
-        "for",
-        "of",
-        "one",
-        "per",
-        "row",
-        "rows",
-        "the",
-        "and",
-        "with",
-        "each",
-    }
-)
-_KEY_SUFFIXES = ("_id", "id", "_key", "_code", "_no", "_number", "_num")
-_NORM_RE = re.compile(r"[^a-z0-9]+")
 
 
 @dataclass
@@ -45,40 +28,6 @@ class JoinTarget:
 class JoinCatalog:
     targets: list[JoinTarget] = field(default_factory=list)
     pack_joins: list[dict[str, str]] = field(default_factory=list)
-
-
-def _norm(name: str) -> str:
-    return _NORM_RE.sub("_", str(name or "").strip().lower()).strip("_")
-
-
-def _tokens(text: str) -> set[str]:
-    parts = {_norm(part) for part in re.split(r"[^a-zA-Z0-9]+", str(text or "")) if part}
-    return {part for part in parts if part and part not in _STOPWORDS and len(part) > 1}
-
-
-def _stems(name: str) -> set[str]:
-    normalized = _norm(name)
-    if not normalized:
-        return set()
-    stems = {normalized}
-    for suffix in _KEY_SUFFIXES:
-        if normalized.endswith(suffix) and len(normalized) > len(suffix):
-            stems.add(normalized[: -len(suffix)].rstrip("_"))
-    if normalized in {"id", "pk", "key"}:
-        stems.add("id")
-    return {stem for stem in stems if stem}
-
-
-def _column_lookup(columns: list[str]) -> dict[str, str]:
-    lookup: dict[str, str] = {}
-    for column in columns:
-        raw = str(column or "").strip()
-        if not raw:
-            continue
-        lookup.setdefault(_norm(raw), raw)
-        for stem in _stems(raw):
-            lookup.setdefault(stem, raw)
-    return lookup
 
 
 def source_keys(table: dict[str, Any]) -> list[str]:

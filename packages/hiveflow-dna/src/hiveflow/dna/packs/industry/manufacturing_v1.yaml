@@ -1,0 +1,298 @@
+pack_id: manufacturing
+version: 1.0.0
+status: draft
+description: >
+  Product manufacturing / distribution industry data model — order to
+  fulfillment to invoice. See docs/product-vision.md for the vertical rationale.
+
+entities:
+  - id: customer
+    display_name: Customer
+    grain: one row per customer
+    primary_key: customer_key
+    required: true
+    fields:
+      - id: customer_key
+        display_name: Customer ID
+        type: string
+        required: true
+      - id: name
+        display_name: Name
+        type: string
+        required: true
+      - id: segment
+        display_name: Segment
+        type: string
+
+  - id: item
+    display_name: Item
+    grain: one row per item / SKU
+    primary_key: item_key
+    required: true
+    fields:
+      - id: item_key
+        display_name: Item ID
+        type: string
+        required: true
+      - id: sku
+        display_name: SKU
+        type: string
+        required: true
+      - id: description
+        display_name: Description
+        type: string
+      - id: unit_cost
+        display_name: Unit Cost
+        type: currency
+      - id: unit_price
+        display_name: Unit Price
+        type: currency
+
+  - id: sales_order
+    display_name: Sales Order
+    grain: one row per order line
+    primary_key: order_line_key
+    required: true
+    fields:
+      - id: order_line_key
+        display_name: Order Line ID
+        type: string
+        required: true
+      - id: order_id
+        display_name: Order ID
+        type: string
+        required: true
+        description: Order header id — several lines share this.
+      - id: customer_id
+        display_name: Customer
+        type: string
+        required: true
+        description: References customer.customer_key.
+      - id: item_id
+        display_name: Item
+        type: string
+        required: true
+        description: References item.item_key.
+      - id: order_date
+        display_name: Order Date
+        type: date
+        required: true
+      - id: quantity_ordered
+        display_name: Quantity Ordered
+        type: number
+        required: true
+      - id: status
+        display_name: Status
+        type: string
+        description: "open | fulfilled | cancelled"
+
+  - id: fulfillment
+    display_name: Fulfillment
+    grain: one row per shipment line
+    primary_key: shipment_line_key
+    required: true
+    fields:
+      - id: shipment_line_key
+        display_name: Shipment Line ID
+        type: string
+        required: true
+      - id: order_line_id
+        display_name: Order Line
+        type: string
+        required: true
+        description: References sales_order.order_line_key.
+      - id: customer_id
+        display_name: Customer
+        type: string
+        required: true
+        description: References customer.customer_key.
+      - id: item_id
+        display_name: Item
+        type: string
+        required: true
+        description: References item.item_key.
+      - id: ship_date
+        display_name: Ship Date
+        type: date
+      - id: quantity_ordered
+        display_name: Quantity Ordered
+        type: number
+        required: true
+        description: Denormalized from the order line for fill-rate calculation.
+      - id: quantity_shipped
+        display_name: Quantity Shipped
+        type: number
+        required: true
+      - id: on_time_in_full
+        display_name: On Time In Full
+        type: boolean
+        description: True when this shipment line was both on time and in full.
+      - id: invoiced
+        display_name: Invoiced
+        type: boolean
+        description: Whether this shipment line has been invoiced yet.
+
+  - id: invoice
+    display_name: Invoice
+    grain: one row per invoice line
+    primary_key: invoice_line_key
+    fields:
+      - id: invoice_line_key
+        display_name: Invoice Line ID
+        type: string
+        required: true
+      - id: shipment_line_id
+        display_name: Shipment Line
+        type: string
+        description: References fulfillment.shipment_line_key.
+      - id: customer_id
+        display_name: Customer
+        type: string
+        required: true
+        description: References customer.customer_key.
+      - id: item_id
+        display_name: Item
+        type: string
+        required: true
+        description: References item.item_key.
+      - id: invoice_date
+        display_name: Invoice Date
+        type: date
+        required: true
+      - id: quantity_invoiced
+        display_name: Quantity Invoiced
+        type: number
+      - id: unit_price
+        display_name: Unit Price
+        type: currency
+      - id: amount
+        display_name: Amount
+        type: currency
+        required: true
+
+joins:
+  - id: sales_order_to_customer
+    left_entity: sales_order
+    right_entity: customer
+    left_key: customer_id
+    right_key: customer_key
+    cardinality: many_to_one
+  - id: sales_order_to_item
+    left_entity: sales_order
+    right_entity: item
+    left_key: item_id
+    right_key: item_key
+    cardinality: many_to_one
+  - id: fulfillment_to_sales_order
+    left_entity: fulfillment
+    right_entity: sales_order
+    left_key: order_line_id
+    right_key: order_line_key
+    cardinality: many_to_one
+  - id: fulfillment_to_customer
+    left_entity: fulfillment
+    right_entity: customer
+    left_key: customer_id
+    right_key: customer_key
+    cardinality: many_to_one
+  - id: fulfillment_to_item
+    left_entity: fulfillment
+    right_entity: item
+    left_key: item_id
+    right_key: item_key
+    cardinality: many_to_one
+  - id: invoice_to_fulfillment
+    left_entity: invoice
+    right_entity: fulfillment
+    left_key: shipment_line_id
+    right_key: shipment_line_key
+    cardinality: many_to_one
+  - id: invoice_to_customer
+    left_entity: invoice
+    right_entity: customer
+    left_key: customer_id
+    right_key: customer_key
+    cardinality: many_to_one
+  - id: invoice_to_item
+    left_entity: invoice
+    right_entity: item
+    left_key: item_id
+    right_key: item_key
+    cardinality: many_to_one
+
+calendar:
+  id: manufacturing_calendar
+  type: calendar_year
+  date_field: sales_order.order_date
+  period_grain: month
+
+kpis:
+  - id: fill_rate
+    name: Fill Rate
+    description: Units shipped as a share of units ordered.
+    entity_id: fulfillment
+    formula_type: ratio
+    numerator_kpi: _fill_rate_shipped_qty
+    denominator_kpi: _fill_rate_ordered_qty
+    format:
+      type: percent
+      decimal_places: 1
+
+  - id: _fill_rate_shipped_qty
+    name: Quantity Shipped
+    description: Component KPI — total quantity shipped.
+    entity_id: fulfillment
+    formula_type: sum
+    value_field: quantity_shipped
+
+  - id: _fill_rate_ordered_qty
+    name: Quantity Ordered
+    description: Component KPI — total quantity ordered (fulfillment lines).
+    entity_id: fulfillment
+    formula_type: sum
+    value_field: quantity_ordered
+
+  - id: otif
+    name: On Time In Full (OTIF)
+    description: Share of shipment lines delivered both on time and in full.
+    entity_id: fulfillment
+    formula_type: ratio
+    numerator_kpi: _otif_count
+    denominator_kpi: _otif_total_count
+    format:
+      type: percent
+      decimal_places: 1
+
+  - id: _otif_count
+    name: OTIF Count
+    description: Component KPI — shipment lines delivered on time and in full.
+    entity_id: fulfillment
+    formula_type: count
+    filter_field: on_time_in_full
+    filter_value: true
+
+  - id: _otif_total_count
+    name: Total Shipment Lines
+    description: Component KPI — total shipment lines.
+    entity_id: fulfillment
+    formula_type: count
+
+  - id: unbilled_fulfillment
+    name: Unbilled Fulfillment
+    description: Shipment lines that have not yet been invoiced.
+    entity_id: fulfillment
+    formula_type: count
+    filter_field: invoiced
+    filter_value: false
+
+  - id: customer_margin
+    name: Customer Margin
+    description: >
+      Revenue less item cost by customer. Needs a cost join against item and a
+      subtraction this template's formula vocabulary doesn't support — author
+      via KPI Generator against the mapped invoice and item entities.
+    entity_id: invoice
+    formula_type: sum
+    value_field: amount
+    group_by: [customer_id]
+    auto_materializable: false
