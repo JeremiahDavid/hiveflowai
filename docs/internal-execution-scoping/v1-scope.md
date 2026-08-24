@@ -2,6 +2,12 @@
 
 What the reconciliation engine **ships in v1**, what waits, and how it unlocks the user-facing product (Option A → Option B).
 
+> **Framing note (superseded positioning).** This doc scopes v1 around a **product manufacturer / distributor** ICP and an exception-briefing deliverable. That ICP is no longer the committed direction — see [product-vision.md](../product-vision.md) for the current north star (a centralized data model across systems, with industry-specific connectors and industry-specific model frameworks). Manufacturing/distribution remains a **candidate vertical**, not the chosen one.
+>
+> **Still valid:** the pipeline capability list, canonical entity set, automate-vs-review defaults, onboarding fit gate, and metrics targets — these describe engineering behavior that is industry-agnostic. The "Expansion path (industry repeatability)" section is the earliest sketch of what [product-vision.md](../product-vision.md) now calls **industry framework packs**.
+>
+> **Superseded:** the ICP selection gate, the specific source-priority table, and the Option A → Option B product sequencing.
+
 **Companion:** [data-lake-architecture.md](./data-lake-architecture.md) — AWS storage layout for multi-source ingest.
 
 ---

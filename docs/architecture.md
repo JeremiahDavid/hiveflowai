@@ -8,20 +8,25 @@ How HiveFlowAI / hiveflow is deployed today: AWS stacks, domains, connectors, an
 
 ## Product framing — DMaaS
 
-**DMaaS (Data Model as a Service)** is the overall product container. It is a cloud service that exposes a fully built, governed, continuously updated semantic data model (dimensions, facts, relationships, metrics) through APIs so applications, BI tools, and AI agents can consume structured meaning without building the model themselves.
+**North star:** one centralized, governed data model spanning every system a business runs on, consumed by reporting and by AI agents that optimize operations. The target shape is **industry-specific connectors feeding industry-specific data model frameworks** on top of a shared universal core. Full framing, connector tiers, and vertical prioritization: [product-vision.md](./product-vision.md).
+
+**DMaaS (Data Model as a Service)** is the delivery mechanism for that model — a cloud service that exposes the fully built, governed, continuously updated semantic data model (dimensions, facts, relationships, metrics) through APIs so applications, BI tools, and AI agents can consume structured meaning without building the model themselves.
 
 Inside DMaaS:
 
 | Capability | Role |
 |---|---|
-| **Connect** | Land source systems (Business Central, QuickBooks Online, QuickBooks Desktop) into the lake |
-| **DNA Engine** | Process owners tailor the semantic model in plain language; approved logic is pinned |
+| **Connect** | Land source systems into the lake. Today: Business Central, QuickBooks Online, QuickBooks Desktop, and `.xlsx` upload — a **horizontal finance/ERP foundation**, not yet an industry connector set |
+| **DNA Engine** | Process owners tailor the semantic model in plain language; approved logic is pinned. The mechanism that industry framework packs will be built on |
 | **Reporting Engine** | Natural-language reports and portal layouts bound to certified DNA metrics |
 
 Scheduled refresh updates **data** inside the model. Semantic and layout code change only when DNA or reporting packs are promoted.
 
+**Current state vs. target:** everything documented below is the **universal core** — source- and industry-agnostic. The industry connector and industry framework pack layers described in [product-vision.md](./product-vision.md) are direction, not deployed. Nothing on this page is scheduled to change because of them.
+
 **Companion docs:**
 
+- [product-vision.md](./product-vision.md) — north star, layer model, connector tiers, vertical prioritization
 - [data-lake-architecture.md](./internal-execution-scoping/data-lake-architecture.md) — bronze / silver / gold lake design
 - [dna-semantic-engine.md](./internal-execution-scoping/dna-semantic-engine.md) — DNA packs → gold → portal
 - [bc-source-documentation-lambdas.md](./bc-source-documentation-lambdas.md) — BC MS Learn source-docs scrape / relationships / tags

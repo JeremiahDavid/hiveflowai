@@ -17,6 +17,7 @@ Installable packages live under `packages/`. Prefer opening a **single package f
 - `hiveflow.dna` must not import `hiveflow.dna.web`.
 - Shared lake I/O: `hiveflow.storage.parquet` + `hiveflow.storage.paths`.
 - Dev install: `.\scripts\install_dev.ps1` (editable install of all packages).
-- Technical docs: `docs/` (DMaaS framing in `docs/architecture.md`). Operator guides: `onboarding/`.
+- Technical docs: `docs/` (product framing in `docs/product-vision.md`, deployed architecture in `docs/architecture.md`). Operator guides: `onboarding/`.
+- Prefer changes that generalize into a reusable industry pack over ones that solve a single customer — see `docs/product-vision.md`.
 
 See each package’s `AGENTS.md` for the default read set.

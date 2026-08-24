@@ -4,6 +4,8 @@ Core specification for the hiveflow layer: how raw inputs become **trusted, rank
 
 **Audience:** Internal product and engineering. Not customer-facing.
 
+> **Framing note.** Examples in this doc are drawn from a manufacturer/distributor ICP that is no longer the committed direction — see [product-vision.md](../product-vision.md). The **engineering spec is unchanged and industry-agnostic**: entity linking, lifecycle normalization, confidence scoring, provenance, and quality gates are universal-core behavior that every industry framework pack depends on. Read the examples as illustrative, not as scope.
+
 **Companion:** [data-lake-architecture.md](./data-lake-architecture.md) — S3 layout, multi-connector ingest, Glue/Athena, bronze vs gold storage.
 
 ---

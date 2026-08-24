@@ -465,5 +465,5 @@ Silver unpack: [`packages/hiveflow-lake/src/hiveflow/silver/unpack/dbc_documents
 
 - [business-central-setup.md](./business-central-setup.md) — connector setup
 - [onboarding/business-central.md](../onboarding/business-central.md) — client onboarding
-- [mesh-catalog.md](./product-scoping/mesh-catalog.md) — `MESH-BC-INTRA`
+- Mesh catalog (`MESH-BC-INTRA`) — moved to the sibling business repo, under the pre-rename `mesh-*` name
 - [data-lake-architecture.md](./internal-execution-scoping/data-lake-architecture.md) — bronze/silver layout

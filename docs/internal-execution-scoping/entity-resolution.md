@@ -2,6 +2,8 @@
 
 How the hiveflow layer links the **same real-world thing** across ERP, accounting, Excel, and unstructured inputs — when IDs, names, and timing don't align.
 
+> **Framing note.** Examples below use a manufacturer/distributor ICP that is no longer the committed direction — see [product-vision.md](../product-vision.md). The **capability is universal-core and, if anything, more central under the current framing**: cross-system identity resolution is precisely what makes a *centralized* data model possible, and every industry framework pack declares its own identity keys on top of this machinery (patient identity across PMS/imaging/billing, for example, is the same problem as customer identity across ERP/QB).
+
 ---
 
 ## Why this is the core moat

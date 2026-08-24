@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **hiveflow** is the engineering monorepo for **HiveFlowAI**, a **DMaaS (Data Model as a Service)** platform: it exposes a governed, continuously updated semantic data model (dimensions, facts, relationships, metrics) through APIs so BI tools and AI agents can consume structured meaning without building the model themselves. Three capabilities: **Connect** (source ingest), **DNA Engine** (semantic modeling/governance), **Reporting Engine** (NL reports and portal).
 
+**North star:** one centralized, governed data model across every system a business runs on, consumed by reporting and by AI agents that optimize operations. The target shape is **industry-specific connectors + industry-specific data model frameworks (packs)** layered on a shared universal core, so implementation for the next customer in an industry is fast. What exists today is the universal core plus a horizontal finance/ERP connector set — the vertical layers are direction, not built. Read [docs/product-vision.md](docs/product-vision.md) before making roadmap-shaped decisions (new connector, new pack, new engine surface); prefer changes that generalize into a pack over ones that solve a single customer.
+
 First/reference connector: QuickBooks Online. Also supports QuickBooks Desktop (via Web Connector/SOAP) and Dynamics 365 Business Central (OData). Deploys to AWS via CDK — raw data lands in S3, ingest runs on scheduled Lambda/Step Functions/Glue.
 
 Business/GTM/commercial docs live in the sibling repo `../hiveflow-business/` — never load that into engineering tasks.

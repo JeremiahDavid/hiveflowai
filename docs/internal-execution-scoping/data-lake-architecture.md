@@ -6,10 +6,14 @@ How HiveFlow stores, organizes, and queries multi-source ingest data on AWS — 
 
 **Companion docs:**
 
+- [product-vision.md](../product-vision.md) — north star, layer model, connector tiers
 - [reconciliation-engine.md](./reconciliation-engine.md) — parse → map → match → publish pipeline
 - [v1-scope.md](./v1-scope.md) — v1 sources and capabilities
-- [industry-system-clusters.md](../industry-system-clusters.md) — connector playbooks (`fishbowl_qb_excel`, `cin7_qb_excel`, `netsuite_intra`, `bc_intra`, …)
 - [pre-launch-checklist.md](../business-admin/pre-launch-checklist.md) — infra provisioning checklist
+
+> **Framing note.** The lake design below is **universal core — unchanged and industry-agnostic**. Its ICP examples (split ops + QuickBooks stacks, full-ERP manufacturers) predate the current framing in [product-vision.md](../product-vision.md); read them as illustrative. Industry framework packs land on exactly this layout — a pack changes what `silver/` and `gold/dna/` *mean*, not where they live.
+>
+> Connector playbooks previously lived in `industry-system-clusters.md`, which now sits in the sibling repo `../../hiveflow-business/`.
 
 ---
 
@@ -295,7 +299,7 @@ companies:
 | `sources[].connector` | Slug for secret name, S3 prefix, Lambda routing |
 | `sources[].schedule` | EventBridge cron for pull connectors |
 | `sources[].trigger: s3_inbox` | Event-driven ingest for file drops |
-| `reconcile.playbook` | Column maps and entity model — see playbooks in [industry-system-clusters.md](../industry-system-clusters.md) |
+| `reconcile.playbook` | Column maps and entity model — playbooks (`industry-system-clusters.md`) now live in the sibling business repo |
 | `reconcile.required_sources` | Batch gate: suppress publish if any required source missing |
 
 ---

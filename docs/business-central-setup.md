@@ -347,5 +347,5 @@ Incremental watermarks (`lastModifiedDateTime` per entity) are stored in S3 at `
 
 - [Data lake architecture](./internal-execution-scoping/data-lake-architecture.md) — BC ingest pattern
 - [DBC data model](./dbc-data-model.md) — entity relationships and join paths
-- [Mesh node catalog](./product-scoping/mesh-node-catalog.md) — `SYS-BC`
-- [Mesh catalog](./product-scoping/mesh-catalog.md) — `MESH-BC-INTRA`
+- [Product vision](./product-vision.md) — BC is a **T1 direct, horizontal** connector; see connector tiers
+- Node / mesh catalogs (`SYS-BC`, `MESH-BC-INTRA`) — moved to the sibling business repo, under the pre-rename `mesh-*` names

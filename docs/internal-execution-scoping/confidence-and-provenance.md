@@ -2,6 +2,8 @@
 
 How the hiveflow layer decides **what to trust**, **what to hold back**, and **how to explain every surfaced fact** — even when AI is invisible to the user.
 
+> **Framing note.** Examples reference a manufacturer/distributor ICP that is no longer the committed direction — see [product-vision.md](../product-vision.md). The **spec is universal-core and unchanged**. It also gets more load-bearing under the current framing: a model consumed by AI agents that act on operations needs confidence and provenance more than a model consumed only by a human reading a chart.
+
 ---
 
 ## Principle

@@ -2,11 +2,11 @@
 
 Engineering monorepo for **HiveFlowAI** — the **DMaaS (Data Model as a Service)** platform.
 
-**DMaaS** is a cloud service that exposes a fully built, governed, continuously updated semantic data model (dimensions, facts, relationships, metrics) through APIs so applications, BI tools, and AI agents can consume structured meaning without building the model themselves. Connect, DNA Engine, and Reporting Engine are capabilities inside DMaaS.
+**North star:** one centralized, governed data model spanning every system a business runs on, consumed by reporting and by AI agents that optimize operations. **DMaaS** is how that model is delivered — a cloud service exposing the built, governed, continuously updated semantic model (dimensions, facts, relationships, metrics) through APIs so applications, BI tools, and AI agents can consume structured meaning without building the model themselves. Connect, DNA Engine, and Reporting Engine are capabilities inside DMaaS.
 
-POC for the HiveFlow reconciliation layer. First connector: **QuickBooks Online**.
+The long-term shape is **industry-specific connectors + industry-specific data model frameworks**, so implementation for the next customer in an industry is fast. Today's connectors — **QuickBooks Online**, **QuickBooks Desktop**, and **Dynamics 365 Business Central** — are the horizontal finance/ERP foundation that layer sits on, not the destination. See [docs/product-vision.md](docs/product-vision.md).
 
-Deploys to AWS via CDK: raw data lands in S3, ingest runs on a scheduled Lambda.
+Deploys to AWS via CDK: raw data lands in S3, ingest runs on scheduled Lambda / Step Functions / Glue.
 
 ## Setup (one virtual environment)
 

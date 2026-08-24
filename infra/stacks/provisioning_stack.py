@@ -65,7 +65,9 @@ class ProvisioningStack(Stack):
             config_bucket.grant_read(role, "config.yaml")
 
         github_owner = str(self.node.try_get_context("hiveflowGithubOwner") or "JeremiahDavid")
-        github_repo = str(self.node.try_get_context("hiveflowGithubRepo") or "glue")
+        # Repo renamed glue -> hiveflow (2026-08). Override with
+        # -c hiveflowGithubRepo=... if pointing CodeBuild at a fork.
+        github_repo = str(self.node.try_get_context("hiveflowGithubRepo") or "hiveflow")
         github_connection_arn = str(
             self.node.try_get_context("hiveflowGithubConnectionArn") or ""
         ).strip()

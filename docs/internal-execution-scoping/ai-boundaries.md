@@ -4,6 +4,8 @@ What AI is for in the hiveflow layer, what it must **never** do, and how to stay
 
 **Positioning:** AI is **implementation advantage**, not the product headline. Market outcomes; use AI to deliver them reliably across messy SMB ops data.
 
+> **Framing note.** Written against a manufacturer/distributor ICP that is no longer the committed direction — see [product-vision.md](../product-vision.md). The **guardrails are universal-core and still binding**: AI assists model *authoring* (schema mapping, entity-resolution ranking, KPI drafting), never scheduled *refresh* — approved logic is pinned and replayed verbatim. One thing the current framing adds: AI agents are now an explicit **consumer** of the finished model, not only a tool inside the pipeline. The boundaries here govern AI *inside* hiveflow; agent-facing consumption is a separate surface.
+
 ---
 
 ## Strategic role of AI

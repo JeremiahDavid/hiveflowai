@@ -2,15 +2,16 @@
 
 Technical specification for **DNA — Semantic Engine** and the parallel **Reporting Engine**: customer documentation → versioned YAML/MD packs → AI-generated semantic and UI code → certified gold outputs and HiveFlowAI portal.
 
-DNA and Reporting sit inside **DMaaS (Data Model as a Service)** — the product container that exposes a fully built, governed, continuously updated semantic data model (dimensions, facts, relationships, metrics) through APIs so applications, BI tools, and AI agents can consume structured meaning without building the model themselves. See [architecture.md](../architecture.md#product-framing--dmaas).
+DNA and Reporting sit inside **DMaaS (Data Model as a Service)** — how the model is delivered: a cloud service that exposes a fully built, governed, continuously updated semantic data model (dimensions, facts, relationships, metrics) through APIs so applications, BI tools, and AI agents can consume structured meaning without building the model themselves. See [architecture.md](../architecture.md#product-framing--dmaas).
+
+**Why this doc matters to the roadmap:** the pack → compile → validate → publish mechanism described here is the machinery that **industry framework packs** will be built on. Packs today are generic accounting; the target is one pack per industry, shipped and reused across every customer in it. See [product-vision.md](../product-vision.md).
 
 **Audience:** Internal product and engineering.
 
 **Companion docs:**
 
+- [product-vision.md](../product-vision.md) — north star, layer model, what an industry framework pack must define
 - [architecture.md](../architecture.md) — platform architecture and DMaaS framing
-- [dna-offering.md](../product-scoping/dna-offering.md) — customer-facing offering and workflow
-- [dna-kpi-starter-catalog.md](../product-scoping/dna-kpi-starter-catalog.md) — starter KPI IDs
 - [dbc-data-model.md](../dbc-data-model.md) — BC join reference
 - [ai-boundaries.md](./ai-boundaries.md) — AI guardrails
 - [confidence-and-provenance.md](./confidence-and-provenance.md) — provenance model
@@ -221,7 +222,7 @@ On success:
 
 ## Doc ingestion (DNA Engine — AI-assisted)
 
-Module: [`packages/hiveflow-dna/src/hiveflow/dna/ingest_docs.py`](../../packages/hiveflow-dna/src/hiveflow/dna/ingest_docs.py)
+Module: **not implemented.** This section describes intended behavior; there is no `ingest_docs` module in `hiveflow-dna` today. The shipped doc pipeline is the BC MS Learn scrape under [`dna/source_docs/`](../../packages/hiveflow-dna/src/hiveflow/dna/source_docs/), which is a different thing — see [bc-source-documentation-lambdas.md](../bc-source-documentation-lambdas.md).
 
 **Trigger:** Customer submits raw documentation (markdown, text, PDF extracts, workshop notes) when they want semantic changes — not on schedule.
 
