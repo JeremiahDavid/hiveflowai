@@ -56,14 +56,6 @@ companies:
       dev:
         aws:
           region: us-east-2
-        qbo:
-          tier: sandbox
-          entity_bundle: full_accounting
-          schedule:
-            hour: 6
-            minute: 0
-        qbd:
-          entity_bundle: full_accounting
         dbc:
           entity_bundle: full
           schedule:
