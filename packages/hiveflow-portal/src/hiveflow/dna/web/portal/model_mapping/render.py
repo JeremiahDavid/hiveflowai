@@ -84,7 +84,7 @@ def render_model_mapping_page(
             available=available or [],
             action_url=action_url,
         )
-        return f'<section class="section"><div class="card">{picker_html}</div></section>'
+        return f'<div class="model-mapping-page"><section class="section"><div class="card">{picker_html}</div></section></div>'
 
     completion = completion or {"overall_percent": 100.0, "by_entity": {}}
     entity_rows = _entity_rows(template, mapping, completion, url=url)
@@ -116,4 +116,4 @@ def render_model_mapping_page(
         "portal/model_mapping/_promote_panel.html", action_url=action_url, report=promote_report
     )
     body += f'<section class="section"><div class="card">{promote_html}</div></section>'
-    return body
+    return f'<div class="model-mapping-page">{body}</div>'

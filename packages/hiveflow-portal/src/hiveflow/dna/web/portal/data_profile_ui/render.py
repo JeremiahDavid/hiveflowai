@@ -29,13 +29,16 @@ def render_data_profile_index_page(*, url: Callable[[str], str], rows: list[dict
         """
         for source in sources
     )
+    refresh_row = f'<div class="profile-source-refresh-row">{refresh_forms}</div>' if refresh_forms else ""
     return f"""
+    <div class="data-profile-page">
     <section class="section">
       <div class="card">
-        {refresh_forms}
+        {refresh_row}
         {_index_table_html(rows, url=url)}
       </div>
     </section>
+    </div>
     """
 
 
@@ -69,12 +72,12 @@ def render_data_profile_detail_page(
         )
         action_url = detail_url(url, source, entity)
         body += f"""
-        <form method="post" action="{escape(action_url)}">
+        <form method="post" action="{escape(action_url)}" class="profile-refresh-form">
           <input type="hidden" name="action" value="refresh_entity" />
           <button type="submit" class="btn btn-primary">Profile now</button>
         </form>
         """
-        return f'<section class="section"><div class="card">{body}</div></section>'
+        return f'<div class="data-profile-page"><section class="section"><div class="card">{body}</div></section></div>'
 
     detail_html = render_template(
         "portal/data_profile/_profile_detail.html",
@@ -87,4 +90,4 @@ def render_data_profile_detail_page(
         notes=[str(n) for n in (profile.get("notes") or []) if str(n).strip()],
         fields=_field_rows(profile),
     )
-    return f'<section class="section"><div class="card">{detail_html}</div></section>'
+    return f'<div class="data-profile-page"><section class="section"><div class="card">{detail_html}</div></section></div>'

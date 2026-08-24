@@ -5037,3 +5037,161 @@
         transform: none;
       }
     }
+
+    /* ── Shared: muted helper text (used across data profile / model mapping /
+       spreadsheet engine / semantics panels) ── */
+
+    .muted {
+      color: var(--text-muted);
+    }
+
+    /* ── Data Profile Explorer ── */
+
+    .data-profile-page .profile-source-refresh-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.6rem;
+      margin-bottom: 1rem;
+    }
+
+    .data-profile-page .semantic-builder-table {
+      margin-bottom: 1rem;
+    }
+
+    .data-profile-page .profile-overrides-form,
+    .data-profile-page .profile-refresh-form {
+      margin-top: 1.25rem;
+    }
+
+    .data-profile-page .profile-overrides-form .section-title {
+      margin-top: 1.25rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .data-profile-page .profile-overrides-actions {
+      display: flex;
+      margin-top: 1.25rem;
+    }
+
+    .data-profile-page .profile-purpose-input,
+    .data-profile-page .profile-description-input {
+      display: block;
+      width: 100%;
+      resize: vertical;
+      padding: 0.55rem 0.75rem;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--text);
+      font: inherit;
+      line-height: 1.45;
+    }
+
+    .data-profile-page .profile-purpose-input:focus,
+    .data-profile-page .profile-description-input:focus {
+      outline: none;
+      border-color: var(--accent-mid);
+      box-shadow: 0 0 0 2px rgba(var(--green-rgb), 0.18);
+    }
+
+    .data-profile-page .profile-description-input {
+      min-width: 14rem;
+    }
+
+    .data-profile-page .profile-description-input + .badge {
+      margin-top: 0.4rem;
+    }
+
+    .data-profile-page .profile-meta,
+    .data-profile-page .profile-notes {
+      margin-bottom: 1rem;
+    }
+
+    .data-profile-page .profile-notes {
+      list-style: disc;
+      padding-left: 1.15rem;
+      font-size: 0.85rem;
+    }
+
+    .data-profile-page .profile-notes li {
+      color: var(--text-muted);
+      margin-bottom: 0.3rem;
+    }
+
+    /* ── Model Mapping ── */
+
+    .model-mapping-page .semantic-builder-table {
+      margin-bottom: 1.25rem;
+    }
+
+    .model-mapping-page .profile-meta {
+      margin-bottom: 1rem;
+    }
+
+    .model-mapping-page .profile-meta:first-child {
+      margin-top: 0;
+    }
+
+    .model-mapping-page .section-title {
+      margin-top: 1.25rem;
+    }
+
+    .model-mapping-page .section-title:first-child {
+      margin-top: 0;
+    }
+
+    .model-mapping-page .mapping-bulk-form,
+    .model-mapping-page .mapping-field-form {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      margin: 0 0.5rem 0.5rem 0;
+      vertical-align: middle;
+    }
+
+    .model-mapping-page td:last-child .mapping-bulk-form:last-child,
+    .model-mapping-page td:last-child .mapping-field-form:last-child {
+      margin-right: 0;
+    }
+
+    .model-mapping-page .mapping-add-entity-form,
+    .model-mapping-page .mapping-add-field-form {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.6rem;
+      align-items: center;
+    }
+
+    .model-mapping-page input[type="text"] {
+      padding: 0.55rem 0.7rem;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--text);
+      font: inherit;
+    }
+
+    .model-mapping-page input[type="text"]::placeholder {
+      color: var(--text-dim);
+    }
+
+    .model-mapping-page input[type="text"]:focus {
+      outline: none;
+      border-color: var(--accent-mid);
+      box-shadow: 0 0 0 2px rgba(var(--green-rgb), 0.18);
+    }
+
+    .model-mapping-page .mapping-add-entity-form input[type="text"],
+    .model-mapping-page .mapping-add-field-form input[type="text"] {
+      flex: 1 1 9rem;
+      min-width: 8rem;
+    }
+
+    .model-mapping-page .mapping-column-input {
+      width: 10rem;
+    }
+
+    .model-mapping-page input[name="version"] {
+      min-width: 12rem;
+      margin-right: 0.5rem;
+    }
