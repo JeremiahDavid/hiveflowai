@@ -3,6 +3,9 @@ from hiveflow.storage.paths import (
     gold_dna_prefix,
     gold_dna_staging_prefix,
     gold_prefix,
+    governance_data_profile_entity_key,
+    governance_data_profile_index_key,
+    governance_data_profile_prefix,
     governance_dna_key,
     governance_docs_prefix,
     governance_field_semantics_draft_key,
@@ -33,6 +36,33 @@ def test_silver_stg_source_prefix() -> None:
     from hiveflow.storage.paths import silver_stg_source_prefix
 
     assert silver_stg_source_prefix("qbo") == "silver_stg/qbo"
+
+
+def test_governance_data_profile_prefix() -> None:
+    assert governance_data_profile_prefix("poc_dna_config") == "governance/poc_dna_config/data_profile"
+
+
+def test_governance_data_profile_entity_key() -> None:
+    assert (
+        governance_data_profile_entity_key("poc_dna_config", "QBO", "Customers")
+        == "governance/poc_dna_config/data_profile/qbo/customers.yaml"
+    )
+
+
+def test_governance_data_profile_entity_key_requires_source_and_entity() -> None:
+    import pytest
+
+    with pytest.raises(ValueError):
+        governance_data_profile_entity_key("poc_dna_config", "", "customers")
+    with pytest.raises(ValueError):
+        governance_data_profile_entity_key("poc_dna_config", "qbo", "")
+
+
+def test_governance_data_profile_index_key() -> None:
+    assert (
+        governance_data_profile_index_key("poc_dna_config")
+        == "governance/poc_dna_config/data_profile/index.yaml"
+    )
 
 
 def test_silver_entity_parquet_key() -> None:

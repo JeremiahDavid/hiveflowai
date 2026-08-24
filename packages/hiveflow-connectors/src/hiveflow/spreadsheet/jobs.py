@@ -1440,6 +1440,8 @@ def approve_table(job_id: str, table_id: str, *, username: str = "") -> dict[str
                 },
             }
         )
+    table["silver_entity"] = entry.get("silver_entity")
+    table["silver_source"] = entry.get("silver_source")
     return table
 
 

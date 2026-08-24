@@ -135,6 +135,14 @@ def handler(event: dict[str, Any] | None, _context: Any) -> dict[str, Any]:
         from hiveflow.dna.sql_runtime import apply_silver_sql_pack
 
         return apply_silver_sql_pack(settings, source=str(payload.get("source") or settings.source))
+    if action in {"refresh-data-profile", "refresh_data_profile"}:
+        from hiveflow.dna.data_profile import refresh_data_profile_for_source
+
+        return refresh_data_profile_for_source(
+            settings,
+            source=str(payload.get("source") or settings.source),
+            entities=payload.get("entities"),
+        )
 
     pack = load_production_pack(settings)
     if action == "compile":

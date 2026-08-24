@@ -241,6 +241,23 @@ def governance_semantic_model_manifest_key(pack_id: str, version: str) -> str:
     return f"{governance_semantic_model_version_prefix(pack_id, version)}/manifest.json"
 
 
+def governance_data_profile_prefix(pack_id: str) -> str:
+    """Per-client data profiling / description metadata (all sources, all entities)."""
+    return f"{governance_pack_prefix(pack_id)}/data_profile"
+
+
+def governance_data_profile_entity_key(pack_id: str, source: str, entity: str) -> str:
+    src = source.strip().lower()
+    ent = entity.strip().lower()
+    if not src or not ent:
+        raise ValueError("source and entity are required")
+    return f"{governance_data_profile_prefix(pack_id)}/{src}/{ent}.yaml"
+
+
+def governance_data_profile_index_key(pack_id: str) -> str:
+    return f"{governance_data_profile_prefix(pack_id)}/index.yaml"
+
+
 def governance_semantic_docs_prefix(pack_id: str) -> str:
     """Tenant-uploaded markdown references for semantic RAG (optional)."""
     return f"{governance_pack_prefix(pack_id)}/semantic_docs"

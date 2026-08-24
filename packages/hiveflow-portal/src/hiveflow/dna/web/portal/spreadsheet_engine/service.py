@@ -652,6 +652,27 @@ def _attach_join_proposals(
     )
 
 
+def _attach_data_profile(
+    settings: DnaSettings,
+    *,
+    table: dict[str, Any],
+) -> None:
+    """Run the newly materialized reference table through the data profiling engine.
+
+    Best-effort: profiling failures never block table approval.
+    """
+    silver_entity = str(table.get("silver_entity") or "").strip()
+    silver_source = str(table.get("silver_source") or "").strip()
+    if not silver_entity or not silver_source:
+        return
+    from hiveflow.dna.data_profile import profile_entity
+
+    try:
+        profile_entity(settings, silver_source, silver_entity, layer="silver")
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def approve_table(
     settings: DnaSettings,
     *,
@@ -663,6 +684,7 @@ def approve_table(
 
     _configure_jobs_env(settings)
     table = _approve(job_id, table_id, username=username)
+    _attach_data_profile(settings, table=table)
     return _attach_join_proposals(settings, job_id=job_id, table_id=table_id, table=table)
 
 
