@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import hashlib
 import html
 import os
 from collections.abc import Callable
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlencode
@@ -38,20 +40,28 @@ BINARY_STATIC_CONTENT_TYPES = frozenset(
 )
 
 
-def _static_url(url: Callable[[str], str], filename: str) -> str:
-    """Static asset URL with a mtime-based cache-buster.
-
-    Static responses are served with `Cache-Control: no-cache` but no
-    validator (no ETag/Last-Modified), which some browsers still don't
-    reliably revalidate on plain navigation — a stale copy of theme.css
-    (wrong fonts/colors) or a stale layout script otherwise lingers until
-    a hard refresh. Appending the file's mtime makes an edit change the
-    URL itself, which busts any cache unconditionally.
-    """
+@lru_cache(maxsize=None)
+def _static_asset_version(filename: str) -> str:
     try:
-        version = int((STATIC_DIR / filename).stat().st_mtime)
+        data = (STATIC_DIR / filename).read_bytes()
     except OSError:
-        version = 0
+        return "0"
+    return hashlib.sha256(data).hexdigest()[:10]
+
+
+def _static_url(url: Callable[[str], str], filename: str) -> str:
+    """Static asset URL with a content-hash cache-buster.
+
+    Prod serves static responses with `Cache-Control: public, max-age=86400`.
+    A prior version of this cache-buster used the file's mtime, but Lambda
+    deployment zips normalize every file's mtime to a fixed epoch
+    (1980-01-01) for reproducible asset hashing — so in AWS the `?v=` value
+    was identical on every deploy regardless of content changes, and a
+    real edit to theme.css (or any static asset) would sit invisible behind
+    the browser's 24h cache. Hashing the file's bytes instead guarantees the
+    URL changes exactly when — and only when — the content does.
+    """
+    version = _static_asset_version(filename)
     return url(f"/static/{filename}?v={version}")
 
 

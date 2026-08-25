@@ -1,4 +1,4 @@
-    @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Serif:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Serif:wght@400;500;600;700&family=IBM+Plex+Sans+Condensed:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
 
     :root {
       /* Paper / terminal theme tokens. Legacy variable names are kept so the
@@ -35,7 +35,11 @@
       --portal-sidebar-width: 15rem;
       --portal-sidebar-collapsed-width: 3.5rem;
       --portal-topbar-height: 4.25rem;
-      --font: 'IBM Plex Mono', 'SF Mono', Consolas, monospace;
+      /* Body copy — prose, sentences, and any label that isn't a real h1-h6
+         (brand wordmark, section-title chips, nav links, etc. all inherit
+         this by not setting their own font-family). Real headings use
+         --font-display instead; numeric/code contexts keep --font-mono. */
+      --font: 'IBM Plex Sans Condensed', 'Roboto Condensed', Arial, sans-serif;
       --font-mono: 'IBM Plex Mono', 'SF Mono', Consolas, monospace;
       --font-display: 'IBM Plex Serif', Georgia, serif;
       --space-1: 0.25rem;
