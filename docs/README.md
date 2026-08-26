@@ -20,4 +20,4 @@ Engineering architecture, data-model, and execution specs for the `hiveflow` cod
 
 Connector operator guides live in [`../onboarding/`](../onboarding/).
 
-Business, GTM, commercial, and product-catalog content lives in the sibling folder `../hiveflow-business/`. Never load it into engineering tasks.
+Business, GTM, commercial, and product-catalog content lives in the sibling folder `../hiveflow-business/` (on disk today: `meshflow-business/` — rename pending). Never load it into engineering tasks.

@@ -36,7 +36,7 @@ from hiveflow.storage.paths import (
     governance_data_profile_index_key,
 )
 
-DEFAULT_SAMPLE_LIMIT = 200
+DEFAULT_SAMPLE_LIMIT = 1000
 DEFAULT_BEDROCK_MODEL_ID = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 _JSON_FENCE = re.compile(r"```(?:json)?\s*([\s\S]*?)```", re.IGNORECASE)
 

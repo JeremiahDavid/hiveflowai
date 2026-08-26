@@ -65,9 +65,11 @@ class ProvisioningStack(Stack):
             config_bucket.grant_read(role, "config.yaml")
 
         github_owner = str(self.node.try_get_context("hiveflowGithubOwner") or "JeremiahDavid")
-        # Repo renamed glue -> hiveflow (2026-08). Override with
-        # -c hiveflowGithubRepo=... if pointing CodeBuild at a fork.
-        github_repo = str(self.node.try_get_context("hiveflowGithubRepo") or "hiveflow")
+        # GitHub repo renamed glue -> hiveflowai (2026-08). CodeBuild stores the
+        # resolved owner/repo, so GitHub's rename redirect does NOT cover it --
+        # ProvisioningStack must be redeployed for this to take effect.
+        # Override without a code change: -c hiveflowGithubRepo=...
+        github_repo = str(self.node.try_get_context("hiveflowGithubRepo") or "hiveflowai")
         github_connection_arn = str(
             self.node.try_get_context("hiveflowGithubConnectionArn") or ""
         ).strip()
