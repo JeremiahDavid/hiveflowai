@@ -671,6 +671,35 @@ def reporting_stack_deployed(
     return False
 
 
+def dna_stack_deployed(
+    *,
+    company: str,
+    environment: str,
+    status_payload: dict[str, Any] | None,
+) -> bool:
+    """A client is portal-ready once its data plane (DnaStack) is deployed.
+
+    The reporting UI is the shared PortalStack and DNS is the ``*.{zone}``
+    wildcard — neither is provisioned per client any more.
+    """
+    env_slug = environment.strip().lower()
+    candidates = {f"dnastack-{company.strip().lower()}-{env_slug}"}
+    try:
+        from hiveflow.project_config import dna_stack_name
+
+        candidates.add(dna_stack_name(company, environment).lower())
+    except KeyError:
+        pass
+    stacks = (status_payload or {}).get("deploy", {}).get("stacks", [])
+    for item in stacks:
+        if not isinstance(item, dict):
+            continue
+        if str(item.get("stack_name", "")).strip().lower() not in candidates:
+            continue
+        return str(item.get("status", "")).strip().lower() == "complete"
+    return False
+
+
 def global_dns_stack_deployed(
     *,
     environment: str,
@@ -701,16 +730,15 @@ def portal_deploy_ready(
     client_id: str,
     environment: str,
     status_payload: dict[str, Any] | None,
+    company: str | None = None,
 ) -> bool:
-    if not reporting_stack_deployed(
-        client_id=client_id,
+    # Readiness is now just the client's data plane; the shared PortalStack and
+    # wildcard DNS are environment-level, not per client.
+    return dna_stack_deployed(
+        company=(company or client_id),
         environment=environment,
         status_payload=status_payload,
-    ):
-        return False
-    if portal_dns_required(environment=environment):
-        return global_dns_stack_deployed(environment=environment, status_payload=status_payload)
-    return True
+    )
 
 
 def invite_onboarding_admin(
@@ -734,8 +762,9 @@ def invite_onboarding_admin(
         client_id=client_id,
         environment=environment,
         status_payload=status_payload,
+        company=company,
     ):
-        raise ValueError("Deploy ReportingStack and GlobalDnsStack before inviting a portal admin.")
+        raise ValueError("Deploy the client's DnaStack before inviting a portal admin.")
 
     from hiveflow.dna.web.portal.cognito import PORTAL_ROLE_ADMIN, invite_portal_user
     from hiveflow.dna.web.portal.config import load_client_portal_config

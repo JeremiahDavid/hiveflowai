@@ -49,6 +49,9 @@ from hiveflow.project_config import (
     platform_admin_stack_module_name,
     platform_admin_stack_name,
     platform_admin_web_api_export_name,
+    portal_stack_module_name,
+    portal_stack_name,
+    portal_web_api_export_name,
     provisioning_stack_module_name,
     provisioning_stack_name,
     reporting_stack_module_name,
@@ -158,9 +161,22 @@ if cdk_scope in ("all", "platform") and platform_enabled:
     global_ui_module = importlib.import_module(f"stacks.{global_ui_stack_module_name()}")
     global_dns_module = importlib.import_module(f"stacks.{global_dns_stack_module_name()}")
     global_dna_module = importlib.import_module(f"stacks.{global_dna_stack_module_name()}")
-    reporting_module = importlib.import_module(f"stacks.{reporting_stack_module_name()}")
+    portal_module = importlib.import_module(f"stacks.{portal_stack_module_name()}")
     platform_admin_module = importlib.import_module(f"stacks.{platform_admin_stack_module_name()}")
     provisioning_module = importlib.import_module(f"stacks.{provisioning_stack_module_name()}")
+
+    # Legacy per-client ReportingStack + per-client reporting DNS records. Off by
+    # default now that PortalStack serves every client through the wildcard
+    # domain; `-c legacyReporting=true` keeps them for the cut-over / rollback
+    # window (see the Phase 9 plan).
+    legacy_reporting = str(
+        app.node.try_get_context("legacyReporting") or ""
+    ).strip().lower() in ("1", "true", "yes")
+    reporting_module = (
+        importlib.import_module(f"stacks.{reporting_stack_module_name()}")
+        if legacy_reporting
+        else None
+    )
 
     for environment, platform_env_config in iter_platform_deploy_environments():
         if filter_environment and environment != filter_environment:
@@ -228,8 +244,28 @@ if cdk_scope in ("all", "platform") and platform_enabled:
                 description=f"Client onboarding CodeBuild provisioner for {environment}",
             )
 
+        portal_stack = None
+        if global_ui_stack is not None:
+            portal_stack = portal_module.PortalStack(
+                app,
+                portal_stack_name(environment),
+                environment=environment,
+                ui_config=ui_config,
+                portal_user_pool=global_ui_stack.portal_user_pool,
+                portal_user_pool_client=global_ui_stack.portal_user_pool_client,
+                portal_session_secret=global_ui_stack.portal_session_secret,
+                domain_config=ui_config.get("domain", {}) if isinstance(ui_config.get("domain"), dict) else {},
+                env=cdk.Environment(
+                    account=account,
+                    region=region,
+                ),
+                description=f"Multi-tenant client reporting portal for {environment}",
+            )
+
         reporting_stacks: list[tuple[str, dict, Any]] = []
-        for client_id, reporting_company, client_cfg in iter_portal_reporting_clients(platform_env_config):
+        for client_id, reporting_company, client_cfg in (
+            iter_portal_reporting_clients(platform_env_config) if legacy_reporting else []
+        ):
             if filter_company_key and reporting_company.strip().lower() != filter_company_key:
                 continue
 
@@ -293,31 +329,39 @@ if cdk_scope in ("all", "platform") and platform_enabled:
                     admin_hostname=admin_hostname,
                 )
 
-            # DNS must map every configured portal client — not only the company
-            # filter used for scoped onboarding deploys.
+            # Per-client reporting subdomains are legacy — `*.{zone}` now routes
+            # every client to PortalStack. Kept only during the cut-over window.
             dns_reporting_targets: list[ReportingDnsTarget] = []
-            for dns_client_id, reporting_company, client_cfg in iter_portal_reporting_clients(
-                platform_env_config
-            ):
-                try:
-                    from hiveflow.project_config import get_environment_config
+            if legacy_reporting:
+                for dns_client_id, reporting_company, client_cfg in iter_portal_reporting_clients(
+                    platform_env_config
+                ):
+                    try:
+                        from hiveflow.project_config import get_environment_config
 
-                    company_env_config = get_environment_config(reporting_company, environment)
-                except KeyError:
-                    continue
-                if not is_dna_stack_enabled(company_env_config):
-                    continue
-                dns_reporting_targets.append(
-                    ReportingDnsTarget(
-                        rest_api_id=_resolve_web_api_id(
-                            context_key=_reporting_web_api_context_key(dns_client_id),
-                            export_name=reporting_web_api_export_name(dns_client_id, environment),
-                        ),
-                        client_id=dns_client_id,
-                        reporting_hostname=str(
-                            client_cfg.get("reporting_hostname", dns_client_id)
-                        ).strip().lower(),
+                        company_env_config = get_environment_config(reporting_company, environment)
+                    except KeyError:
+                        continue
+                    if not is_dna_stack_enabled(company_env_config):
+                        continue
+                    dns_reporting_targets.append(
+                        ReportingDnsTarget(
+                            rest_api_id=_resolve_web_api_id(
+                                context_key=_reporting_web_api_context_key(dns_client_id),
+                                export_name=reporting_web_api_export_name(dns_client_id, environment),
+                            ),
+                            client_id=dns_client_id,
+                            reporting_hostname=str(
+                                client_cfg.get("reporting_hostname", dns_client_id)
+                            ).strip().lower(),
+                        )
                     )
+
+            wildcard_portal_api_id = None
+            if portal_stack is not None:
+                wildcard_portal_api_id = _resolve_web_api_id(
+                    context_key="portalWebApiId",
+                    export_name=portal_web_api_export_name(environment),
                 )
 
             global_dns_module.GlobalDnsStack(
@@ -330,6 +374,7 @@ if cdk_scope in ("all", "platform") and platform_enabled:
                     export_name=global_ui_web_api_export_name(environment),
                 ),
                 reporting_targets=dns_reporting_targets,
+                wildcard_portal_api_id=wildcard_portal_api_id,
                 admin_target=admin_dns_target,
                 manage_base_path_mappings=_dns_manage_base_path_mappings(),
                 env=cdk.Environment(

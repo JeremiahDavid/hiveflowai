@@ -12,9 +12,11 @@ Complete before handing a new client portal to end users.
 ## Infrastructure (CloudFormation)
 
 - [ ] `IngestStack-{COMPANY}-{ENV}` — `CREATE_COMPLETE`
-- [ ] `DnaStack-{COMPANY}-{ENV}` — `CREATE_COMPLETE` (when DNA enabled)
-- [ ] `ReportingStack-{client_id}-{ENV}` — `CREATE_COMPLETE`
-- [ ] DNS subdomain resolves (`{client_id}.hive-flow-ai.com`) when using GlobalDnsStack
+- [ ] `DnaStack-{COMPANY}-{ENV}` — `CREATE_COMPLETE` (when DNA enabled) — also mints `hiveflow-portal-tenant-{company}-{ENV}`
+- [ ] Client row synced to `config.yaml` in `meshflow-platform-config-{ENV}` S3 (`platform.environments.{ENV}.ui.portal.clients.{client_id}` with `reporting_company`)
+- [ ] `PortalStack-{ENV}` + `GlobalDnsStack-{ENV}` already deployed for the environment (once, not per client)
+- [ ] `{client_id}.hive-flow-ai.com` resolves via the `*.{zone}` wildcard and serves the portal login
+- [ ] At least one portal admin invited (`custom:portal_role=admin`) — the role default is now `member`
 
 ## Data plane
 

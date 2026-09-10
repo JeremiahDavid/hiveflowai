@@ -150,9 +150,9 @@ def _describe_execution_status(
         elif os.getenv("HIVEFLOW_DNA_REFRESH_MOCK", "").strip().lower() in {"1", "true", "yes"}:
             return "SUCCEEDED"
         else:
-            import boto3
+            from hiveflow.storage.aws import sfn_client
 
-            client = boto3.client("stepfunctions")
+            client = sfn_client()
             payload = client.describe_execution(executionArn=execution_arn)
         return str(payload.get("status") or "").strip().upper()
     except Exception as exc:  # noqa: BLE001 — stale ARNs / IAM gaps must not 500 the portal
@@ -310,9 +310,9 @@ def _start_refresh_execution(
 
     state_machine_arn = _resolve_state_machine_arn(company=company, environment=environment)
     execution_name = _sanitize_execution_name(client_id=client_id)
-    import boto3
+    from hiveflow.storage.aws import sfn_client
 
-    client = boto3.client("stepfunctions")
+    client = sfn_client()
     return client.start_execution(
         stateMachineArn=state_machine_arn,
         name=execution_name,

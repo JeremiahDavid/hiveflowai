@@ -9,7 +9,10 @@ untangles further -- see docs/architecture.md and the Phase 1 plan.
 
 from __future__ import annotations
 
+import contextlib
+import logging
 import os
+from contextvars import ContextVar
 from typing import Any, Callable
 from urllib.parse import quote, urlencode, urlparse
 
@@ -24,9 +27,13 @@ from hiveflow.dna.web.portal.auth import (
     clear_session_cookie,
     client_id_from_reporting_hostname,
     effective_portal_client_id,
+    is_global_portal_admin,
     is_global_portal_client_id,
+    list_configured_portal_client_ids,
     login_response,
+    normalize_portal_client_id,
     PortalClientAccessError,
+    PortalTenantUnresolved,
     require_portal_admin,
     require_portal_session,
     resolve_login_client_id_hint,
@@ -49,6 +56,51 @@ from hiveflow.dna.web.portal.views import (
 )
 from hiveflow.dna.web.theme import render_login_page
 from hiveflow.dna.web.routing_helpers import _app_url, _json_response, _redirect
+
+logger = logging.getLogger("hiveflow.portal.tenant")
+
+# Per-request scope for tenant credential isolation. ``application()`` (app.py)
+# opens ``request_tenant_scope()`` around dispatch; ``_portal_settings`` (strict)
+# pushes the assumed-role session onto the ExitStack so every AWS client built
+# for the rest of the request uses the tenant's credentials.
+_request_tenant_stack: ContextVar[contextlib.ExitStack | None] = ContextVar(
+    "hiveflow_request_tenant_stack", default=None
+)
+_request_tenant_bound: ContextVar[str] = ContextVar(
+    "hiveflow_request_tenant_bound", default=""
+)
+
+
+@contextlib.contextmanager
+def request_tenant_scope():
+    """Open a per-request tenant-credential scope for the duration of dispatch."""
+    stack = contextlib.ExitStack()
+    tok_stack = _request_tenant_stack.set(stack)
+    tok_bound = _request_tenant_bound.set("")
+    try:
+        with stack:
+            yield
+    finally:
+        _request_tenant_bound.reset(tok_bound)
+        _request_tenant_stack.reset(tok_stack)
+
+
+def _bind_request_tenant_credentials(company: str, environment: str) -> None:
+    """Assume ``company``'s data role for the rest of the current request.
+
+    No-op outside an HTTP request scope (unit tests, async workers) — those
+    callers install credentials themselves.
+    """
+    stack = _request_tenant_stack.get()
+    if stack is None or not company:
+        return
+    if _request_tenant_bound.get() == company:
+        return
+    from hiveflow.dna.web.portal.tenant_credentials import tenant_credentials
+
+    stack.enter_context(tenant_credentials(company, environment))
+    _request_tenant_bound.set(company)
+
 
 GLOBAL_UI_ENDPOINTS = frozenset(
     {
@@ -141,7 +193,15 @@ def _portal_settings(
     client_config: Any,
     *,
     environment: str,
+    strict: bool = False,
 ) -> DnaSettings:
+    """Bind a request to its tenant's ``DnaSettings``.
+
+    ``strict`` (multi-tenant mode): the tenant MUST resolve from
+    ``client_config.reporting_company`` — never fall through to the Lambda's
+    env-var base settings. A missing ``reporting_company`` or data bucket raises
+    ``PortalTenantUnresolved`` (→ HTTP 403).
+    """
     from hiveflow.project_config import (
         get_environment_config,
         resolve_aws_deploy_env,
@@ -152,6 +212,7 @@ def _portal_settings(
     from hiveflow.storage.paths import company_dna_config_id
 
     reporting_company = str(getattr(client_config, "reporting_company", "")).strip()
+    client_id = str(getattr(client_config, "client_id", "")).strip()
     company = reporting_company or base_settings.company
     pack_id = company_dna_config_id(company) if company else (
         client_config.pack_id or base_settings.pack_id
@@ -159,9 +220,31 @@ def _portal_settings(
 
     use_local_data = os.getenv("HIVEFLOW_LOCAL_DATA", "").strip().lower() in {"1", "true", "yes"}
 
+    if strict and not reporting_company:
+        logger.warning(
+            "tenant_unresolved client_id=%s reason=no_reporting_company", client_id or "?"
+        )
+        raise PortalTenantUnresolved(
+            f"Reporting is not configured for client {client_id or 'this account'}."
+        )
+
     if reporting_company:
-        client_env = get_environment_config(reporting_company, environment)
-        bucket = base_settings.s3_bucket
+        try:
+            client_env = get_environment_config(reporting_company, environment)
+        except KeyError as exc:
+            if strict:
+                logger.error(
+                    "tenant_unresolved client_id=%s company=%s reason=no_company_env",
+                    client_id or "?",
+                    reporting_company,
+                )
+                raise PortalTenantUnresolved(
+                    f"Reporting company {reporting_company!r} is not configured for {environment}."
+                ) from exc
+            raise
+        # Multi-tenant: always derive the bucket from the tenant, never inherit
+        # a bucket baked into the shared Lambda's base settings.
+        bucket = None if strict else base_settings.s3_bucket
         if not bucket and not use_local_data:
             try:
                 account, region = resolve_aws_deploy_env(client_env, environment)
@@ -174,6 +257,25 @@ def _portal_settings(
             except ValueError:
                 bucket = None
         source = resolve_dna_source(client_env)
+        if strict:
+            if not bucket:
+                logger.error(
+                    "tenant_unresolved client_id=%s company=%s reason=no_data_bucket",
+                    client_id or "?",
+                    reporting_company,
+                )
+                raise PortalTenantUnresolved(
+                    f"Data store is not provisioned for client {client_id or reporting_company}."
+                )
+            logger.info(
+                "tenant_scope client_id=%s company=%s bucket=%s pack_id=%s",
+                client_id or "?",
+                reporting_company,
+                bucket,
+                pack_id,
+            )
+            # Run the rest of this request with the tenant's assumed credentials.
+            _bind_request_tenant_credentials(reporting_company, environment)
         return DnaSettings(
             source=source,
             data_dir=base_settings.data_dir,
@@ -251,6 +353,10 @@ def build_portal_routes(
 ) -> tuple[list[Rule], dict[str, Callable[..., Response]]]:
     """Build the client-portal Rule list and endpoint dispatch table."""
 
+    # Multi-tenant: one Lambda serves every client, so tenant resolution must
+    # fail closed rather than fall back to env-var base settings.
+    tenant_strict = resolved_ui_mode == "reporting_multitenant"
+
     rules: list[Rule] = []
     if resolved_ui_mode in {"full", "global"}:
         rules.extend(
@@ -268,7 +374,7 @@ def build_portal_routes(
                     Rule("/portal/", endpoint="portal_home"),
                 ]
             )
-    if resolved_ui_mode in {"full", "reporting"}:
+    if resolved_ui_mode in {"full", "reporting", "reporting_multitenant"}:
         rules.extend(
             [
                 Rule("/portal/login", endpoint="portal_login", methods=["GET", "POST"]),
@@ -485,7 +591,7 @@ def build_portal_routes(
         )
 
     def on_portal_login(request: Request) -> Response:
-        if resolved_ui_mode == "reporting" and global_login_url:
+        if resolved_ui_mode in {"reporting", "reporting_multitenant"} and global_login_url:
             existing = session_from_request(request, company=company, environment=environment)
             if existing is not None:
                 next_path = _sanitize_portal_next(
@@ -496,11 +602,22 @@ def build_portal_routes(
                 if destination.startswith("http://") or destination.startswith("https://"):
                     return _external_redirect(destination)
                 return _redirect(request, next_path)
+            # ``reporting`` is pinned to one client via ``fixed_client_id``;
+            # ``reporting_multitenant`` serves every client, so the hint comes
+            # from the reporting subdomain the browser arrived on.
+            login_client_hint = fixed_client_id
+            if resolved_ui_mode == "reporting_multitenant":
+                login_client_hint = (
+                    _client_id_from_reporting_hostname(f"https://{request.host}/") or ""
+                )
             next_path = _sanitize_portal_next(
                 request.args.get("next", "/portal"),
-                client_id=fixed_client_id,
+                client_id=login_client_hint,
             )
-            params = {"next": next_path, "client_id": fixed_client_id, "client_id_locked": "1"}
+            params = {"next": next_path}
+            if login_client_hint:
+                params["client_id"] = login_client_hint
+                params["client_id_locked"] = "1"
             return _external_redirect(f"{global_login_url}?{urlencode(params)}")
 
         from hiveflow.dna.web.portal.cognito import (
@@ -761,6 +878,19 @@ def build_portal_routes(
         )
         if session is not None and fixed_client_id and session.client_id != fixed_client_id:
             return None, _redirect(request, "/portal/login")
+        if session is not None and tenant_strict:
+            client_id = normalize_portal_client_id(session.client_id)
+            known = client_id in list_configured_portal_client_ids(env_config)
+            if not known and not is_global_portal_admin(
+                username=session.username, client_id=client_id
+            ):
+                # Stale cookie for a removed/renamed tenant — force re-auth.
+                logger.warning(
+                    "tenant_session_rejected client_id=%s username=%s",
+                    client_id or "?",
+                    session.username,
+                )
+                return None, _redirect(request, "/portal/login")
         return session, redirect
 
     def _portal_is_admin(username: str) -> bool:
@@ -782,7 +912,7 @@ def build_portal_routes(
         if redirect is not None:
             return redirect
         client = _client_config(_portal_client_id(session))
-        portal_settings = _portal_settings(settings, client, environment=environment)
+        portal_settings = _portal_settings(settings, client, environment=environment, strict=tenant_strict)
         is_admin = _portal_is_admin(session.username)
         reporting_override, preview_meta = _resolve_reporting_override(
             request, portal_settings=portal_settings, is_admin=is_admin
@@ -1169,7 +1299,7 @@ def build_portal_routes(
         if redirect is not None:
             return redirect
         client = _client_config(_portal_client_id(session))
-        portal_settings = _portal_settings(settings, client, environment=environment)
+        portal_settings = _portal_settings(settings, client, environment=environment, strict=tenant_strict)
         is_admin = _portal_is_admin(session.username)
         message = str(request.args.get("msg") or "")
         error = str(request.args.get("err") or "")
@@ -1549,7 +1679,7 @@ def build_portal_routes(
         if not _portal_is_admin(session.username):
             return _json_response({"error": "forbidden"}, status=403)
         client = _client_config(_portal_client_id(session))
-        portal_settings = _portal_settings(settings, client, environment=environment)
+        portal_settings = _portal_settings(settings, client, environment=environment, strict=tenant_strict)
         proposal_id = str(request.args.get("proposal_id") or "").strip()
         if not proposal_id:
             return _json_response({"error": "proposal_id required"}, status=400)
@@ -1572,7 +1702,7 @@ def build_portal_routes(
         if redirect is not None:
             return redirect
         client = _client_config(_portal_client_id(session))
-        portal_settings = _portal_settings(settings, client, environment=environment)
+        portal_settings = _portal_settings(settings, client, environment=environment, strict=tenant_strict)
         is_admin = _portal_is_admin(session.username)
         message = str(request.args.get("msg") or "")
         error = str(request.args.get("err") or "")
@@ -1637,7 +1767,7 @@ def build_portal_routes(
             )
 
         client = _client_config(_portal_client_id(session))
-        portal_settings = _portal_settings(settings, client, environment=environment)
+        portal_settings = _portal_settings(settings, client, environment=environment, strict=tenant_strict)
         message = ""
         error = ""
         invites_enabled = cognito_configured()
@@ -1747,7 +1877,7 @@ def build_portal_routes(
         from hiveflow.dna.web.portal.views import render_source_docs_inspector, render_spreadsheet_engine
 
         client = _client_config(_portal_client_id(session))
-        portal_settings = _portal_settings(settings, client, environment=environment)
+        portal_settings = _portal_settings(settings, client, environment=environment, strict=tenant_strict)
         is_admin = _portal_is_admin(session.username)
         configured_sources = _configured_reference_sources(portal_settings)
         active = normalize_reference_source(source or "") or "sse"
@@ -2265,7 +2395,7 @@ def build_portal_routes(
         session = session_from_request(request, company=company, environment=environment)
         assert session is not None
         client = _client_config(_portal_client_id(session))
-        portal_settings = _portal_settings(settings, client, environment=environment)
+        portal_settings = _portal_settings(settings, client, environment=environment, strict=tenant_strict)
         return portal_settings, session, None
 
 
@@ -2475,7 +2605,7 @@ def build_portal_routes(
         session = session_from_request(request, company=company, environment=environment)
         assert session is not None
         client = _client_config(_portal_client_id(session))
-        portal_settings = _portal_settings(settings, client, environment=environment)
+        portal_settings = _portal_settings(settings, client, environment=environment, strict=tenant_strict)
         return _json_response(load_pack_from_settings(portal_settings).to_dict())
 
     def on_api_output(request: Request, output_id: str) -> Response:
@@ -2484,7 +2614,7 @@ def build_portal_routes(
         session = session_from_request(request, company=company, environment=environment)
         assert session is not None
         client = _client_config(_portal_client_id(session))
-        portal_settings = _portal_settings(settings, client, environment=environment)
+        portal_settings = _portal_settings(settings, client, environment=environment, strict=tenant_strict)
         limit_raw = request.args.get("limit")
         limit = int(limit_raw) if limit_raw and limit_raw.isdigit() else None
         sort_column = str(request.args.get("sort_column") or "").strip() or None
@@ -2508,7 +2638,7 @@ def build_portal_routes(
         session = session_from_request(request, company=company, environment=environment)
         assert session is not None
         client = _client_config(_portal_client_id(session))
-        portal_settings = _portal_settings(settings, client, environment=environment)
+        portal_settings = _portal_settings(settings, client, environment=environment, strict=tenant_strict)
         return _json_response({"pages": list_reporting_pages_json(portal_settings)})
 
     def on_api_reporting_page(request: Request, subpath: str) -> Response:
@@ -2517,7 +2647,7 @@ def build_portal_routes(
         session = session_from_request(request, company=company, environment=environment)
         assert session is not None
         client = _client_config(_portal_client_id(session))
-        portal_settings = _portal_settings(settings, client, environment=environment)
+        portal_settings = _portal_settings(settings, client, environment=environment, strict=tenant_strict)
         path = f"/portal/{subpath.strip('/')}"
         try:
             return _json_response(fetch_page_data(portal_settings, path))
@@ -2530,7 +2660,7 @@ def build_portal_routes(
         session = session_from_request(request, company=company, environment=environment)
         assert session is not None
         client = _client_config(_portal_client_id(session))
-        portal_settings = _portal_settings(settings, client, environment=environment)
+        portal_settings = _portal_settings(settings, client, environment=environment, strict=tenant_strict)
         return _json_response(build_reporting_binding_catalog(portal_settings))
 
 
@@ -2540,7 +2670,7 @@ def build_portal_routes(
         session = session_from_request(request, company=company, environment=environment)
         assert session is not None
         client = _client_config(_portal_client_id(session))
-        portal_settings = _portal_settings(settings, client, environment=environment)
+        portal_settings = _portal_settings(settings, client, environment=environment, strict=tenant_strict)
         manifest = read_json_artifact(portal_settings, f"{portal_settings.gold_dna_prefix}/manifest.json")
         return _json_response(manifest or {})
 

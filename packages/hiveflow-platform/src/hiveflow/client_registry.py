@@ -13,14 +13,11 @@ from hiveflow.project_config import (
     dna_stack_name,
     get_environment_config,
     get_platform_environment_config,
-    global_dns_stack_name,
     ingest_stack_name,
     is_dna_stack_enabled,
-    is_global_dns_stack_enabled,
     iter_configured_connectors,
     iter_portal_reporting_clients,
     load_project_config,
-    reporting_stack_name,
     resolve_qbo_secret_name,
     save_project_config,
 )
@@ -178,6 +175,61 @@ def validate_client_create_spec(spec: ClientCreateSpec, *, path: Path | None = N
         dna_source = spec.dna.source.strip().lower()
         if dna_source not in connector_sources:
             raise ValueError("dna.source must match one of the configured connectors")
+
+
+def iter_portal_clients_missing_reporting_company(
+    config: dict[str, Any],
+) -> list[tuple[str, str, str]]:
+    """Yield ``(environment, client_id, reason)`` for every misconfigured portal client.
+
+    Multi-tenant reporting binds each portal client to its data plane via
+    ``reporting_company``; an empty value, or one with no ``companies.<name>``
+    block, cannot be served.
+    """
+    problems: list[tuple[str, str, str]] = []
+    companies = config.get("companies", {})
+    companies = companies if isinstance(companies, dict) else {}
+    platform_envs = (config.get("platform", {}) or {}).get("environments", {})
+    platform_envs = platform_envs if isinstance(platform_envs, dict) else {}
+    for env_name, platform_env in platform_envs.items():
+        if not isinstance(platform_env, dict):
+            continue
+        ui_cfg = platform_env.get("ui", {})
+        portal_cfg = ui_cfg.get("portal", {}) if isinstance(ui_cfg, dict) else {}
+        clients = portal_cfg.get("clients", {}) if isinstance(portal_cfg, dict) else {}
+        if not isinstance(clients, dict):
+            continue
+        for client_id, raw in clients.items():
+            if client_id == "default":
+                continue
+            reporting_company = ""
+            if isinstance(raw, dict):
+                reporting_company = str(raw.get("reporting_company", "")).strip()
+            if not reporting_company:
+                problems.append((str(env_name), str(client_id), "missing reporting_company"))
+                continue
+            company_cfg = companies.get(reporting_company)
+            company_envs = (
+                company_cfg.get("environments", {}) if isinstance(company_cfg, dict) else {}
+            )
+            if not isinstance(company_envs, dict) or env_name not in company_envs:
+                problems.append(
+                    (
+                        str(env_name),
+                        str(client_id),
+                        f"reporting_company {reporting_company!r} has no companies.{reporting_company}"
+                        f".environments.{env_name} block",
+                    )
+                )
+    return problems
+
+
+def _assert_portal_client_reporting_company(
+    config: dict[str, Any], *, environment: str, client_id: str
+) -> None:
+    for env_name, cid, reason in iter_portal_clients_missing_reporting_company(config):
+        if env_name == environment and cid == client_id:
+            raise ValueError(f"Portal client {client_id!r} ({environment}): {reason}")
 
 
 def _connector_block(spec: ConnectorSpec) -> dict[str, Any]:
@@ -338,6 +390,9 @@ class ClientRegistry:
             raise ValueError("platform.ui.portal.clients must be a mapping")
         clients[client_id] = _portal_client_block(spec)
 
+        _assert_portal_client_reporting_company(
+            config, environment=environment, client_id=client_id
+        )
         save_project_config(config, self._path)
         return ClientRecord(
             company=company,
@@ -400,6 +455,9 @@ class ClientRegistry:
             raise ValueError(f"Portal client {client_id!r} not found in config.yaml")
         clients[client_id] = _portal_client_block(spec)
 
+        _assert_portal_client_reporting_company(
+            config, environment=environment, client_id=client_id
+        )
         save_project_config(config, self._path)
         return ClientRecord(
             company=company,
@@ -412,18 +470,14 @@ class ClientRegistry:
         )
 
     def expected_stack_names(self, record: ClientRecord) -> list[str]:
+        # A client's own stacks are its data plane only. The reporting UI is the
+        # shared PortalStack (deployed once per environment, not per client) and
+        # DNS is the `*.{zone}` wildcard — neither is provisioned per onboard.
         stacks = [ingest_stack_name(record.company, record.environment, path=self._path)]
         try:
             env_config = get_environment_config(record.company, record.environment, path=self._path)
             if is_dna_stack_enabled(env_config):
                 stacks.append(dna_stack_name(record.company, record.environment, path=self._path))
-        except KeyError:
-            pass
-        stacks.append(reporting_stack_name(record.client_id, record.environment))
-        try:
-            platform_env = get_platform_environment_config(record.environment, path=self._path)
-            if is_global_dns_stack_enabled(platform_env):
-                stacks.append(global_dns_stack_name(record.environment))
         except KeyError:
             pass
         return stacks

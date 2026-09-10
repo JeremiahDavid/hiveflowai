@@ -138,6 +138,13 @@ class DnaStack(Stack):
             pack_id=pack_id,
         )
 
+        self._create_portal_tenant_role(
+            company=company,
+            environment=environment,
+            data_bucket=data_bucket,
+            source_docs_gold_fn=source_docs_gold_fn,
+        )
+
         CfnOutput(self, "DataBucketName", value=data_bucket_name)
         CfnOutput(self, "DnaPublishFunctionName", value=dna_publish_fn.function_name)
         CfnOutput(self, "DnaRefreshGlueJobName", value=dna_glue["glue_job_name"])
@@ -172,6 +179,70 @@ class DnaStack(Stack):
 
         for key, value in cost_allocation_tags(company, environment).items():
             Tags.of(self).add(key, value)
+
+    def _create_portal_tenant_role(
+        self,
+        *,
+        company: str,
+        environment: str,
+        data_bucket: s3.IBucket,
+        source_docs_gold_fn: _lambda.Function,
+    ) -> iam.Role:
+        """Narrow role the multi-tenant portal Lambda assumes to touch THIS company's data.
+
+        The shared ``PortalStack`` Lambda has no standing access to any tenant's
+        bucket/Athena/Step Functions; it assumes this role per request. Trust is
+        pinned to the shared serve role by ARN so no cross-stack ref is needed.
+        """
+        company_slug = company.strip().lower()
+        env_slug = environment.strip().lower()
+        serve_role_arn = (
+            f"arn:aws:iam::{self.account}:role/hiveflow-portal-{env_slug}-serve-role"
+        )
+        role = iam.Role(
+            self,
+            "PortalTenantRole",
+            role_name=f"hiveflow-portal-tenant-{company_slug}-{env_slug}",
+            assumed_by=iam.AccountPrincipal(self.account).with_conditions(
+                {"ArnEquals": {"aws:PrincipalArn": serve_role_arn}}
+            ),
+            description=(
+                f"Data-plane access for portal client company {company_slug} "
+                f"({env_slug}); assumed per request by the shared portal Lambda"
+            ),
+            max_session_duration=Duration.hours(1),
+        )
+
+        data_bucket.grant_read_write(role)
+        grant_athena_query(role, company=company, environment=environment)
+        source_docs_gold_fn.grant_invoke(role)
+
+        role.add_to_policy(
+            iam.PolicyStatement(
+                actions=["states:StartExecution"],
+                resources=[
+                    f"arn:aws:states:{self.region}:{self.account}:stateMachine:"
+                    f"{company_slug}-{env_slug}-*"
+                ],
+            )
+        )
+        role.add_to_policy(
+            iam.PolicyStatement(
+                actions=["states:DescribeExecution", "states:StopExecution"],
+                resources=[
+                    f"arn:aws:states:{self.region}:{self.account}:execution:"
+                    f"{company_slug}-{env_slug}-*:*"
+                ],
+            )
+        )
+
+        CfnOutput(
+            self,
+            "PortalTenantRoleArn",
+            value=role.role_arn,
+            export_name=f"hiveflow-portal-tenant-{company_slug}-{env_slug}-role-arn",
+        )
+        return role
 
     def _seed_governance_on_deploy(
         self,

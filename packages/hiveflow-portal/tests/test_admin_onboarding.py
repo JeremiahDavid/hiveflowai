@@ -202,30 +202,28 @@ def test_reporting_stack_deployed_matches_reporting_stack_status() -> None:
     assert reporting_stack_deployed(client_id="acme", environment="dev", status_payload=payload) is False
 
 
-def test_portal_deploy_ready_requires_global_dns_when_configured(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        "hiveflow.dna.web.admin.onboarding.handlers.portal_dns_required",
-        lambda **kwargs: True,
-    )
+def test_portal_deploy_ready_tracks_dna_stack() -> None:
+    # Readiness is the client's data plane; the reporting UI is the shared
+    # PortalStack and DNS is the wildcard — neither is per client.
     payload = {
         "deploy": {
             "stacks": [
-                {"stack_name": "ReportingStack-acme-dev", "status": "complete"},
-                {"stack_name": "GlobalDnsStack-dev", "status": "in_progress"},
+                {"stack_name": "IngestStack-acme-dev", "status": "complete"},
+                {"stack_name": "DnaStack-acme-dev", "status": "in_progress"},
             ]
         }
     }
-    assert portal_deploy_ready(client_id="acme", environment="dev", status_payload=payload) is False
+    assert portal_deploy_ready(
+        client_id="acme", company="acme", environment="dev", status_payload=payload
+    ) is False
     payload["deploy"]["stacks"][1]["status"] = "complete"
-    assert portal_deploy_ready(client_id="acme", environment="dev", status_payload=payload) is True
+    assert portal_deploy_ready(
+        client_id="acme", company="acme", environment="dev", status_payload=payload
+    ) is True
 
 
-def test_invite_onboarding_admin_requires_portal_deploy(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        "hiveflow.dna.web.admin.onboarding.handlers.portal_dns_required",
-        lambda **kwargs: True,
-    )
-    with pytest.raises(ValueError, match="Deploy ReportingStack and GlobalDnsStack"):
+def test_invite_onboarding_admin_requires_portal_deploy() -> None:
+    with pytest.raises(ValueError, match="Deploy the client's DnaStack"):
         invite_onboarding_admin(
             company="acme",
             environment="dev",
@@ -239,15 +237,10 @@ def test_invite_onboarding_admin_requires_portal_deploy(monkeypatch: pytest.Monk
 def test_invite_onboarding_admin_calls_cognito_when_ready(monkeypatch: pytest.MonkeyPatch) -> None:
     from unittest.mock import patch
 
-    monkeypatch.setattr(
-        "hiveflow.dna.web.admin.onboarding.handlers.portal_dns_required",
-        lambda **kwargs: True,
-    )
     payload = {
         "deploy": {
             "stacks": [
-                {"stack_name": "ReportingStack-acme-dev", "status": "complete"},
-                {"stack_name": "GlobalDnsStack-dev", "status": "complete"},
+                {"stack_name": "DnaStack-acme-dev", "status": "complete"},
             ]
         }
     }

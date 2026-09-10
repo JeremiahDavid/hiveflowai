@@ -10,9 +10,9 @@ Operator-led client onboarding is available at **admin.hive-flow-ai.com → Onbo
 4. On the client detail page:
    - **Save secret** — credentials go to AWS Secrets Manager (`hiveflow-{company}-{source}-{environment}`)
    - **Validate connector** — DBC smoke test, QBO OAuth status, or QBD secret check
-   - **Deploy stacks** — triggers CodeBuild (`ProvisioningStack-{env}`) for `IngestStack`, `DnaStack`, `ReportingStack`, and `GlobalDnsStack` (portal subdomain DNS)
+   - **Deploy stacks** — triggers CodeBuild (`ProvisioningStack-{env}`) for `IngestStack` and `DnaStack` only. The reporting UI is the shared `PortalStack` and the client is reached via the `*.{zone}` wildcard — no per-client stack or DNS record. (`PortalStack-{env}` / `GlobalDnsStack-{env}` are deployed once per environment by the operator, not per onboard.)
 5. Confirm stack status and post-deploy verification (governance seed, bronze manifest); note the **Client portal** URL on the deploy step
-6. Optionally invite the first client portal admin on the **Deploy** step (after ReportingStack and GlobalDnsStack complete), or skip — GlobalAdmin can sign in to the client portal and assign admins and users at `/portal/governance/users`
+6. Optionally invite the first client portal admin on the **Deploy** step (after `DnaStack` completes), or skip — GlobalAdmin can sign in to the client portal and assign admins and users at `/portal/governance/users`
 
 ## Manual path (IDE/CLI)
 
@@ -26,7 +26,7 @@ Use this when the CodeBuild provisioner is not deployed or for debugging.
 | **`config.yaml` entry** | `companies.{COMPANY}.environments.{ENV}` + matching `platform.environments.{ENV}.ui.portal.clients.{client_id}` |
 | **Secrets** | AWS Secrets Manager `hiveflow-{company}-{source}-{environment}` via wizard or `python scripts/create_secrets.py --file secrets/...` |
 | **CDK bootstrap** | One-time per account/region: `cdk bootstrap` |
-| **Stack deploy** | `cdk deploy IngestStack-{COMPANY}-{ENV} DnaStack-{COMPANY}-{ENV} ReportingStack-{client_id}-{ENV} GlobalDnsStack-{ENV}` |
+| **Stack deploy** | `cdk deploy IngestStack-{COMPANY}-{ENV} DnaStack-{COMPANY}-{ENV}` (data plane per client). The shared `PortalStack-{ENV}` + `GlobalDnsStack-{ENV}` wildcard are deployed once per environment, not per client. |
 
 Generic stack modules (`ingest_stack.py`, `dna_stack.py`) are shared — no per-company Python files.
 

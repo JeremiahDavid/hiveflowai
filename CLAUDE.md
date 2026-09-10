@@ -51,10 +51,12 @@ cdk bootstrap
 cdk deploy IngestStack-POC-dev          # one target
 cdk deploy --all                        # every non-prod target (prod excluded by default)
 cdk deploy -c company=POC -c environment=dev
-cdk deploy -c scope=platform GlobalUiStack-dev      # UI/reporting only — skips ingest/DNA, synths much faster
+cdk deploy -c scope=platform GlobalUiStack-dev PortalStack-dev   # UI only — skips ingest/DNA, synths much faster
 ```
 
 CDK entry is `infra/app.py`; scopes are `all` | `ingest` | `platform` (`HIVEFLOW_CDK_SCOPE` env or `-c scope=`). `prod` stacks are **not synthesized unless `HIVEFLOW_ENVIRONMENT=prod`** is explicitly set, and the active AWS account must match `config.yaml`'s configured `aws.account` for that environment — this is a deliberate guardrail against deploying prod resources into a dev account. See [README.md](README.md) for the full deploy walkthrough (secrets creation, OAuth, per-connector deploy commands).
+
+**Multi-tenant portal.** Client reporting is **one** shared stack — `PortalStack-{env}` (single Lambda + API + `*.{zone}` wildcard domain) — not a stack per client. The tenant is resolved per request from the Cognito `custom:client_id` claim; the portal Lambda's own role can touch **no** tenant data and assumes `hiveflow-portal-tenant-{company}-{env}` (minted by each company's `DnaStack`) per request for S3/Athena/Glue/Step Functions. `config.yaml` (synced to `meshflow-platform-config-{env}` S3, re-hydrated per container) is the tenant registry. Onboarding a client = deploy its `IngestStack`+`DnaStack`, add the `platform.environments.<env>.ui.portal.clients.<id>` row, create Cognito users with `custom:client_id` — no per-client UI stack or DNS change. `HIVEFLOW_PORTAL_CLIENT_ID` is a local-dev / legacy single-tenant escape hatch only. `-c legacyReporting=true` re-synthesizes the retired per-client `ReportingStack`s + per-subdomain DNS for the cut-over/rollback window.
 
 ## Monorepo layout and package boundaries
 

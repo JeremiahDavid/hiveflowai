@@ -173,9 +173,9 @@ def governance_pack_exists(settings: DnaSettings, pack_id: str) -> bool:
     """True when this company's DNA config pack already has objects under governance/."""
     prefix = governance_pack_prefix(pack_id).rstrip("/") + "/"
     if settings.s3_bucket:
-        import boto3
+        from hiveflow.storage.aws import s3_client
 
-        response = boto3.client("s3").list_objects_v2(
+        response = s3_client().list_objects_v2(
             Bucket=settings.s3_bucket,
             Prefix=prefix,
             MaxKeys=1,

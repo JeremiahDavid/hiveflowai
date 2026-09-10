@@ -59,7 +59,7 @@ flowchart TB
     R53["Route 53 hosted zone<br/>hive-flow-ai.com<br/>Z0833907O664KG7NO3CQ"]
     ACM["ACM certificates<br/>apex · www · poc"]
     CD_APEX["API GW custom domain<br/>hive-flow-ai.com / www"]
-    CD_POC["API GW custom domain<br/>poc.hive-flow-ai.com"]
+    CD_POC["API GW custom domain<br/>*.hive-flow-ai.com (wildcard)"]
   end
 
   SQ -->|"NS delegated to Route 53"| R53
@@ -77,16 +77,16 @@ flowchart TB
       SEC["Secrets Manager<br/>portal session secret"]
     end
 
-    subgraph Reporting["ReportingStack-poc-dev"]
-      RAPI["API Gateway REST<br/>hiveflow-reporting-poc"]
-      RLAM["Lambda<br/>poc-dev-reporting-ui-serve<br/>HIVEFLOW_UI_MODE=reporting"]
+    subgraph Reporting["PortalStack-dev (one, multi-tenant)"]
+      RAPI["API Gateway REST<br/>hiveflow-portal-dev"]
+      RLAM["Lambda<br/>portal-dev-reporting-ui-serve<br/>HIVEFLOW_UI_MODE=reporting_multitenant<br/>tenant = Cognito client_id claim<br/>assumes hiveflow-portal-tenant-{company}-dev per request"]
     end
   end
 
   Visitor -->|"https://hive-flow-ai.com<br/>/ · /platform · /pricing"| CD_APEX
   PortalUser -->|"https://hive-flow-ai.com/portal/login"| CD_APEX
   Admin -->|"portal admin users"| CD_APEX
-  PortalUser -->|"https://poc.hive-flow-ai.com<br/>executive · revenue · charts"| CD_POC
+  PortalUser -->|"https://&lt;client&gt;.hive-flow-ai.com<br/>executive · revenue · charts"| CD_POC
 
   CD_APEX --> GAPI --> GLAM
   CD_POC --> RAPI --> RLAM
@@ -150,7 +150,7 @@ flowchart TB
   subgraph Surfaces["User-facing surfaces"]
     Site["Marketing site<br/>hive-flow-ai.com · www"]
     Login["Portal login / admin<br/>/portal/login"]
-    Dash["Client reporting dashboard<br/>poc.hive-flow-ai.com"]
+    Dash["Client reporting dashboard<br/>&lt;client&gt;.hive-flow-ai.com"]
   end
 
   Site -.-> GAPI
@@ -166,10 +166,10 @@ flowchart TB
 |---|---|---|
 | **IngestStack-POC-dev** | `infra/stacks/ingest_stack.py` | Data lake S3, connector Lambdas / Step Functions / EventBridge, QBD SOAP API, Glue, Athena |
 | **GlobalDnaStack-dev** | `infra/stacks/global_dna_stack.py` | Global BC MS Learn source-docs scrape / relationships / tags |
-| **DnaStack-POC-dev** | `infra/stacks/dna_stack.py` | DNA publish + per-client source-docs gold merge |
+| **DnaStack-POC-dev** | `infra/stacks/dna_stack.py` | DNA publish + per-client source-docs gold merge; mints `hiveflow-portal-tenant-{company}-{env}` (the role PortalStack assumes for this company's data) |
 | **GlobalUiStack-dev** | `infra/stacks/global_ui_stack.py` | Public site, Cognito, SES, session secret |
-| **ReportingStack-poc-dev** | `infra/stacks/reporting_stack.py` | Per-client reporting UI driven by `{company}_reporting_config`; seeds reporting sidecar on deploy; shares Cognito from GlobalUi |
-| **GlobalDnsStack-dev** | `infra/stacks/global_dns_stack.py` | Route 53, ACM, API Gateway custom domains (when `manage_dns: true`) |
+| **PortalStack-dev** | `infra/stacks/portal_stack.py` | **One** multi-tenant client reporting Lambda + API for every client (`HIVEFLOW_UI_MODE=reporting_multitenant`); tenant from the Cognito `client_id` claim; assumes a per-company tenant role for all data access; canary alias deploy. Replaces per-client `ReportingStack` (retired; `-c legacyReporting=true` to re-synth during cut-over) |
+| **GlobalDnsStack-dev** | `infra/stacks/global_dns_stack.py` | Route 53, ACM, API Gateway custom domains — apex/`www`/`admin.` + the `*.{zone}` wildcard that routes every client subdomain to PortalStack (when `manage_dns: true`) |
 
 CDK entry: `infra/app.py`. Scopes: `all` | `ingest` | `platform` (`HIVEFLOW_CDK_SCOPE` / `-c scope=`).
 
@@ -183,7 +183,7 @@ CDK entry: `infra/app.py`. Scopes: `all` | `ingest` | `platform` (`HIVEFLOW_CDK_
 |---|---|---|
 | Marketing / public site | `https://hive-flow-ai.com/`, `www` | GlobalUiStack |
 | Portal login / admin | `https://hive-flow-ai.com/portal/login` | GlobalUiStack |
-| Client reporting dashboard | `https://poc.hive-flow-ai.com/` | ReportingStack-poc |
+| Client reporting dashboard | `https://<client>.hive-flow-ai.com/` (`*.{zone}` wildcard) | PortalStack |
 | QBD SOAP (ops) | stack output `QbdSoapUrl` (`…/prod/soap`) | IngestStack |
 
 App code: `packages/hiveflow-portal/packages/hiveflow-portal/src/hiveflow/dna/web/` (Werkzeug WSGI → `aws-wsgi` on Lambda).
@@ -275,7 +275,7 @@ Browser → Route 53 → API Gateway custom domain → Lambda
 | Region | `us-east-2` |
 | Zone / primary | `hive-flow-ai.com` |
 | Hosted zone ID | `Z0833907O664KG7NO3CQ` |
-| Portal client | `poc` → `poc.hive-flow-ai.com` |
+| Portal clients | `poc`, `poc2` → `<client>.hive-flow-ai.com` via the `*.{zone}` wildcard → PortalStack |
 | DNA source / pack | `dbc` / `{company}_dna_config` + `{company}_reporting_config` |
 | Connector schedules | QBO/DBC 06:00 UTC; DNA 07:00 UTC |
 | SES from | `noreply@hive-flow-ai.com` |

@@ -56,12 +56,15 @@ def test_resolve_client_id_prefers_custom_attribute() -> None:
     assert client_id == "acme"
 
 
-def test_resolve_portal_role_defaults_to_admin() -> None:
-    assert resolve_portal_role({}) == "admin"
+def test_resolve_portal_role_defaults_to_member() -> None:
+    # Least-privilege default; real admins carry an explicit custom:portal_role.
+    assert resolve_portal_role({}) == "member"
+    assert resolve_portal_role({ROLE_ATTRIBUTE: "bogus"}) == "member"
 
 
 def test_resolve_portal_role_honors_attribute() -> None:
     assert resolve_portal_role({ROLE_ATTRIBUTE: "member"}) == "member"
+    assert resolve_portal_role({ROLE_ATTRIBUTE: "admin"}) == "admin"
 
 
 def _mock_list_users_paginator(mock_client: MagicMock, users: list[dict] | None = None) -> None:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from hiveflow.dna.settings import DnaSettings
@@ -11,6 +12,30 @@ from hiveflow.dna.reporting import (
     load_production_reporting,
     load_reporting_boilerplate,
 )
+
+_logger = logging.getLogger("hiveflow.portal.reporting")
+
+# Companies whose reporting sidecar this container has already tried to seed.
+_seeded_reporting_configs: set[str] = set()
+
+
+def _lazy_seed_reporting_config(settings: DnaSettings) -> None:
+    """Best-effort one-time seed of ``{company}_reporting_config.yaml``.
+
+    New clients get it from ``DnaStack``'s governance init; this covers companies
+    whose DnaStack predates that. Idempotent (``ensure_reporting_config`` returns
+    ``skipped`` when present); runs under the request's tenant credentials.
+    """
+    company = (settings.company or "").strip().lower()
+    if not company or not settings.s3_bucket or company in _seeded_reporting_configs:
+        return
+    _seeded_reporting_configs.add(company)
+    try:
+        from hiveflow.dna.init_client import ensure_reporting_config
+
+        ensure_reporting_config(settings)
+    except Exception:  # noqa: BLE001 — never block a render on the seed
+        _logger.warning("lazy reporting-config seed failed for %s", company, exc_info=True)
 
 # Side-nav entry: (path, title) or (path, title, children) where children are leaf tuples.
 SideNavItem = tuple[str, str] | tuple[str, str, tuple[tuple[str, str], ...]]
@@ -42,6 +67,11 @@ def load_reporting_layout(
     try:
         return load_production_reporting(settings)
     except FileNotFoundError:
+        _lazy_seed_reporting_config(settings)
+        try:
+            return load_production_reporting(settings)
+        except FileNotFoundError:
+            pass
         try:
             return load_reporting_boilerplate(
                 pack_id=settings.reporting_config_id,

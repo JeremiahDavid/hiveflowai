@@ -11,6 +11,7 @@ from hiveflow.project_config import (
     get_environment_config,
     get_ui_config,
     resolve_aws_deploy_env,
+    resolve_data_bucket_name,
     resolve_dna_source,
     resolve_raw_bucket_name,
     resolve_selection,
@@ -28,7 +29,7 @@ def resolve_dna_settings(*, event: dict[str, Any] | None = None) -> DnaSettings:
     ui_mode = os.getenv("HIVEFLOW_UI_MODE", "").strip().lower()
     platform_ui = (
         os.getenv("HIVEFLOW_PLATFORM_UI", "").strip().lower() in ("1", "true", "yes")
-        or ui_mode == "global"
+        or ui_mode in ("global", "reporting_multitenant")
     )
 
     if platform_ui:
@@ -41,11 +42,6 @@ def resolve_dna_settings(*, event: dict[str, Any] | None = None) -> DnaSettings:
     else:
         env_config = get_environment_config(company, environment)
 
-    bucket = os.getenv("HIVEFLOW_S3_BUCKET", "").strip()
-    if not bucket and not platform_ui:
-        account, region = resolve_aws_deploy_env(env_config, environment)
-        bucket = resolve_raw_bucket_name(company, environment, account=account, region=region)
-
     dna_cfg = get_dna_config(env_config)
     ui_cfg = get_ui_config(env_config)
     event_payload = event or {}
@@ -53,6 +49,19 @@ def resolve_dna_settings(*, event: dict[str, Any] | None = None) -> DnaSettings:
     event_company = str(event_payload.get("company", "")).strip()
     if event_company:
         company = event_company
+
+    bucket = os.getenv("HIVEFLOW_S3_BUCKET", "").strip()
+    if not bucket and event_company:
+        # Async worker / CFN event names an explicit tenant — resolve its data
+        # bucket even in platform-UI mode, where ``env_config`` is the
+        # all-clients platform block rather than one company's config.
+        try:
+            bucket = resolve_data_bucket_name(event_company, environment)
+        except (KeyError, ValueError):
+            bucket = ""
+    if not bucket and not platform_ui:
+        account, region = resolve_aws_deploy_env(env_config, environment)
+        bucket = resolve_raw_bucket_name(company, environment, account=account, region=region)
 
     source = str(event_payload.get("source", "")).strip().lower()
     if not source:

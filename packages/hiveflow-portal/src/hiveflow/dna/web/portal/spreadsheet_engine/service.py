@@ -495,10 +495,10 @@ def suggest_catalog_matches(
     parse_payload = None
     bucket = os.getenv("HIVEFLOW_S3_BUCKET", "").strip()
     if bucket:
-        import boto3
+        from hiveflow.storage.aws import s3_client
 
         try:
-            response = boto3.client("s3").get_object(Bucket=bucket, Key=parse_key)
+            response = s3_client().get_object(Bucket=bucket, Key=parse_key)
             parse_payload = json.loads(response["Body"].read().decode("utf-8"))
         except Exception:  # noqa: BLE001
             parse_payload = None

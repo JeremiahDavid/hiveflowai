@@ -14,7 +14,9 @@ Deployment is unchanged: the same three Lambdas, now via Mangum instead of
 
 from __future__ import annotations
 
+import logging
 import os
+import time
 from typing import Any
 
 from a2wsgi import WSGIMiddleware
@@ -25,6 +27,35 @@ from hiveflow.dna.settings import DnaSettings
 from hiveflow.dna.web.app import create_app
 from hiveflow.dna.web.portal.auth import clear_session_cookie
 from hiveflow.dna.web.theme import BRAND_NAME
+
+logger = logging.getLogger("hiveflow.portal.config")
+
+# Re-pull config.yaml from S3 at most this often per container so new/edited
+# tenants appear without a Lambda redeploy. No-op when HIVEFLOW_CONFIG_S3_URI
+# is unset (local dev, bundled config).
+_CONFIG_REFRESH_INTERVAL_S = 45.0
+_last_config_refresh = 0.0
+
+
+class _ConfigRefreshMiddleware:
+    """Throttled ``refresh_platform_config()`` ahead of request handling."""
+
+    def __init__(self, app: Any) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
+        global _last_config_refresh  # noqa: PLW0603 — container-lifetime throttle
+        if scope.get("type") == "http":
+            from hiveflow.project_config import config_s3_uri, refresh_platform_config
+
+            now = time.monotonic()
+            if config_s3_uri() and now - _last_config_refresh >= _CONFIG_REFRESH_INTERVAL_S:
+                _last_config_refresh = now
+                try:
+                    refresh_platform_config()
+                except Exception:  # noqa: BLE001 — stale config must not 5xx a request
+                    logger.warning("refresh_platform_config failed; serving cached config", exc_info=True)
+        await self.app(scope, receive, send)
 
 
 def _host_is_execute_api(headers: list[tuple[bytes, bytes]]) -> bool:
@@ -104,6 +135,7 @@ def create_asgi_app(
 
     app = FastAPI(title=f"{BRAND_NAME} portal", docs_url=None, redoc_url=None, openapi_url=None)
     app.add_middleware(_StagePrefixMiddleware)
+    app.add_middleware(_ConfigRefreshMiddleware)
     app.state.company = company
     app.state.environment = environment
 
@@ -142,6 +174,11 @@ def get_asgi_app() -> FastAPI:
         )
 
         ensure_writable_config_path()
+        # In reporting_multitenant mode the app carries no tenant identity:
+        # env_config is the all-clients platform block, resolve_dna_settings()
+        # returns neutral base settings (no bucket/company), and `company` here
+        # is only a cosmetic default — the real tenant is resolved per request
+        # from the session client_id.
         company, environment = resolve_selection()
         try:
             env_config = get_platform_environment_config(environment)

@@ -464,6 +464,7 @@ def build_admin_routes(
                         client_id=record.client_id,
                         environment=record.environment,
                         status_payload=status_payload,
+                        company=record.company,
                     ),
                     portal_dns_required=portal_dns_required(environment=record.environment),
                     portal_urls=portal_urls,

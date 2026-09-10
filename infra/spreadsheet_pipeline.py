@@ -100,12 +100,13 @@ def create_spreadsheet_pipeline(
         # the image; HIVEFLOW_BEDROCK_MODEL_ID (in common_env) drives the
         # converse fallback if the CLI is somehow unavailable.
     }
+    # No explicit function_name: switching zip -> container image forces a
+    # CloudFormation replacement, and CFN refuses to replace a custom-named
+    # resource (name collision mid-update). These two are referenced only by
+    # ARN (the Step Functions tasks below); nothing looks them up by name.
     interpret_fn = _lambda.DockerImageFunction(
         scope,
         f"{prefix}SpreadsheetInterpretFunction",
-        function_name=lambda_name_for_process(
-            company, environment, "all", Process.SPREADSHEET_INTERPRET
-        ),
         code=_agent_image_code("hiveflow.spreadsheet.handlers.interpret_handler"),
         timeout=Duration.minutes(15),
         memory_size=2048,
@@ -115,9 +116,6 @@ def create_spreadsheet_pipeline(
     propose_fn = _lambda.DockerImageFunction(
         scope,
         f"{prefix}SpreadsheetProposeFunction",
-        function_name=lambda_name_for_process(
-            company, environment, "all", Process.SPREADSHEET_PROPOSE
-        ),
         code=_agent_image_code("hiveflow.spreadsheet.handlers.propose_handler"),
         timeout=Duration.minutes(15),
         memory_size=2048,
@@ -185,7 +183,9 @@ def create_spreadsheet_pipeline(
             company, environment, "all", Process.SPREADSHEET_ANALYZE
         ),
         definition_body=sfn.DefinitionBody.from_chainable(definition),
-        timeout=Duration.minutes(30),
+        # parse(5) + profile(5) + interpret(15) + propose(15) at max, plus retry
+        # slack, exceeds 30m now that interpret/propose are agent-backed.
+        timeout=Duration.minutes(50),
     )
 
     return {

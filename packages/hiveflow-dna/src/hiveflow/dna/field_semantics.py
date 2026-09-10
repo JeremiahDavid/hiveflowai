@@ -28,9 +28,9 @@ def _list_lake_layer_entities(settings: DnaSettings, source_prefix: str) -> list
     prefix = source_prefix.rstrip("/") + "/"
     names: set[str] = set()
     if settings.s3_bucket:
-        import boto3
+        from hiveflow.storage.aws import s3_client
 
-        client = boto3.client("s3")
+        client = s3_client()
         paginator = client.get_paginator("list_objects_v2")
         for page in paginator.paginate(
             Bucket=settings.s3_bucket,
@@ -90,11 +90,12 @@ def _parquet_schema_columns(settings: DnaSettings, entity: str, *, layer: str = 
         parquet_key = silver_entity_parquet_key(settings.source, entity_name)
         local_prefix = silver_entity_prefix(settings.source, entity_name)
     if settings.s3_bucket:
-        import boto3
         from botocore.exceptions import ClientError
 
+        from hiveflow.storage.aws import s3_client
+
         try:
-            payload = boto3.client("s3").get_object(Bucket=settings.s3_bucket, Key=parquet_key)["Body"].read()
+            payload = s3_client().get_object(Bucket=settings.s3_bucket, Key=parquet_key)["Body"].read()
         except ClientError:
             return []
         schema = pq.read_schema(io.BytesIO(payload))

@@ -378,9 +378,6 @@ def _sql_literal(value: str) -> str:
 
 
 def _client(region: str | None) -> Any:
-    import boto3
+    from hiveflow.storage.aws import athena_client
 
-    kwargs: dict[str, Any] = {}
-    if region:
-        kwargs["region_name"] = region
-    return boto3.client("athena", **kwargs)
+    return athena_client(region=region)

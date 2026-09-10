@@ -73,11 +73,11 @@ def enqueue_source_docs_gold_build(
     }
 
     if _on_lambda():
-        import boto3
+        from hiveflow.storage.aws import lambda_client
 
         function_name = gold_function_name(company=company, environment=environment)
         region = os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION") or "us-east-2"
-        client = boto3.client("lambda", region_name=region)
+        client = lambda_client(region=region)
         response = client.invoke(
             FunctionName=function_name,
             InvocationType="Event",

@@ -211,6 +211,61 @@ def attach_client_subdomain(
     return f"https://{hostname}/"
 
 
+def attach_wildcard_portal_domain(
+    scope: Construct,
+    *,
+    rest_api_id: str,
+    hosted_zone: route53.IHostedZone,
+    zone_name: str,
+    stage_name: str = "prod",
+    manage_base_path_mappings: bool = True,
+) -> str:
+    """Map ``*.{zone}`` to the single multi-tenant PortalStack API.
+
+    API Gateway resolves an exact custom-domain name before this wildcard, so any
+    still-attached per-client ``attach_client_subdomain`` mapping keeps winning
+    until it is removed — that is the per-client cut-over lever.
+    """
+    hostname = f"*.{zone_name}"
+    certificate = acm.Certificate(
+        scope,
+        "PortalWildcardCertificate",
+        domain_name=hostname,
+        validation=acm.CertificateValidation.from_dns(hosted_zone),
+    )
+    certificate.apply_removal_policy(RemovalPolicy.RETAIN)
+
+    domain = apigateway.DomainName(
+        scope,
+        "PortalWildcardDomain",
+        domain_name=hostname,
+        certificate=certificate,
+        endpoint_type=apigateway.EndpointType.REGIONAL,
+    )
+    if manage_base_path_mappings:
+        _create_base_path_mapping(
+            scope,
+            "PortalWildcardBasePathMapping",
+            domain=domain,
+            rest_api_id=rest_api_id,
+            stage_name=stage_name,
+        )
+    route53.ARecord(
+        scope,
+        "PortalWildcardAliasRecord",
+        zone=hosted_zone,
+        record_name=dns_record_name(hostname, zone_name),
+        target=route53.RecordTarget.from_alias(route53_targets.ApiGatewayDomain(domain)),
+    )
+    CfnOutput(
+        scope,
+        "PortalWildcardSiteUrl",
+        value=f"https://<client>.{zone_name}/",
+        description="Multi-tenant portal — every client's reporting subdomain",
+    )
+    return hostname
+
+
 def attach_admin_subdomain(
     scope: Construct,
     *,

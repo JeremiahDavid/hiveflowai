@@ -128,7 +128,10 @@ def resolve_portal_role(attributes: dict[str, str]) -> str:
     role = attributes.get(ROLE_ATTRIBUTE, "").strip().lower()
     if role in (PORTAL_ROLE_ADMIN, PORTAL_ROLE_MEMBER):
         return role
-    return PORTAL_ROLE_ADMIN
+    # Default is least-privilege. Real admins carry an explicit
+    # ``custom:portal_role=admin`` (backfilled by scripts/backfill_portal_roles.py);
+    # GlobalAdmin is recognised separately by username.
+    return PORTAL_ROLE_MEMBER
 
 
 def _user_record_from_cognito(entry: dict[str, Any], *, default_client_id: str) -> PortalUserRecord | None:

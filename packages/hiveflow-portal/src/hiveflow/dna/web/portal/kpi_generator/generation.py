@@ -565,6 +565,10 @@ def enqueue_kpi_generation(
         "proposal_id": stub["proposal_id"],
         "prompt": text,
         "client_id": client_id,
+        # Explicit tenant scope so the multi-tenant worker Lambda rebinds to this
+        # client's data store instead of its own (neutral) env vars.
+        "company": settings.company,
+        "s3_bucket": settings.s3_bucket or "",
         "monthly_budget_usd": monthly_budget_usd,
         "username": username,
         "prior_proposal_id": stub["proposal_id"],

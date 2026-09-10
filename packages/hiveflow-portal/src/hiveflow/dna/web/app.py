@@ -12,7 +12,12 @@ from werkzeug.exceptions import NotFound
 from werkzeug.wrappers import Request, Response
 
 from hiveflow.dna.settings import DnaSettings
-from hiveflow.dna.web.portal.auth import effective_portal_client_id, load_portal_users, session_from_request
+from hiveflow.dna.web.portal.auth import (
+    PortalTenantUnresolved,
+    effective_portal_client_id,
+    load_portal_users,
+    session_from_request,
+)
 from hiveflow.dna.web.branding import load_branding_asset
 from hiveflow.dna.web.admin.routes import ADMIN_UI_ENDPOINTS, build_admin_routes
 from hiveflow.dna.web.routing_helpers import _app_url, _json_response
@@ -22,7 +27,9 @@ from hiveflow.dna.web.portal.routes import (
     REPORTING_UI_ENDPOINTS,
     _client_reporting_site_url,
     build_portal_routes,
+    request_tenant_scope,
 )
+from hiveflow.dna.web.portal.tenant_credentials import TenantCredentialsError
 from hiveflow.dna.web.theme import BRAND_NAME, MIME_TYPES, STATIC_DIR
 
 LEGACY_REDIRECTS = {
@@ -106,9 +113,14 @@ def _serve_static(filename: str) -> Response:
     )
 
 
+# ``reporting_multitenant`` is ``reporting`` with the tenant resolved per request
+# from the session ``client_id`` instead of a per-Lambda ``HIVEFLOW_PORTAL_CLIENT_ID``.
+UI_MODES = {"full", "global", "reporting", "reporting_multitenant", "admin"}
+
+
 def _resolve_ui_mode(ui_mode: str | None = None) -> str:
     resolved = (ui_mode or os.getenv("HIVEFLOW_UI_MODE", "full")).strip().lower()
-    if resolved not in {"full", "global", "reporting", "admin"}:
+    if resolved not in UI_MODES:
         return "full"
     return resolved
 
@@ -123,7 +135,13 @@ def create_app(
 ):
     env_config = env_config or {}
     resolved_ui_mode = _resolve_ui_mode(ui_mode)
-    fixed_client_id = os.getenv("HIVEFLOW_PORTAL_CLIENT_ID", "").strip().lower()
+    # In multi-tenant reporting the Lambda serves every client; the tenant comes
+    # from the authenticated session, never a pinned env var.
+    fixed_client_id = (
+        ""
+        if resolved_ui_mode == "reporting_multitenant"
+        else os.getenv("HIVEFLOW_PORTAL_CLIENT_ID", "").strip().lower()
+    )
     global_login_url = os.getenv("HIVEFLOW_GLOBAL_LOGIN_URL", "").strip()
 
     rules: list[Rule] = []
@@ -157,7 +175,7 @@ def create_app(
     enabled_endpoints = set(GLOBAL_UI_ENDPOINTS) | set(REPORTING_UI_ENDPOINTS)
     if resolved_ui_mode == "global":
         enabled_endpoints = GLOBAL_UI_ENDPOINTS
-    elif resolved_ui_mode == "reporting":
+    elif resolved_ui_mode in {"reporting", "reporting_multitenant"}:
         enabled_endpoints = REPORTING_UI_ENDPOINTS
     elif resolved_ui_mode == "admin":
         enabled_endpoints = ADMIN_UI_ENDPOINTS
@@ -192,13 +210,18 @@ def create_app(
 
         adapter = url_map.bind_to_environ(environ)
         try:
-            endpoint, values = adapter.match()
-            if endpoint not in enabled_endpoints:
-                response = Response("Not found", status=404)
-                return response(environ, start_response)
-            response = endpoints[endpoint](request, **values)
+            with request_tenant_scope():
+                endpoint, values = adapter.match()
+                if endpoint not in enabled_endpoints:
+                    response = Response("Not found", status=404)
+                    return response(environ, start_response)
+                response = endpoints[endpoint](request, **values)
         except NotFound:
             response = Response("Not found", status=404)
+        except PortalTenantUnresolved as exc:
+            response = Response(exc.message, status=403, mimetype="text/plain")
+        except TenantCredentialsError as exc:
+            response = Response(str(exc), status=503, mimetype="text/plain")
         except Exception as exc:  # noqa: BLE001 — surface errors in dev UI
             response = _json_response({"error": str(exc)}, status=500)
         return response(environ, start_response)

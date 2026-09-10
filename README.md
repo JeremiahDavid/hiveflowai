@@ -150,16 +150,15 @@ cdk deploy -c company=POC -c environment=dev
 Platform-only deploys skip ingest/DNA stacks and synth much faster (use when changing UI or reporting):
 
 ```powershell
-cdk deploy -c scope=platform GlobalUiStack-dev
-cdk deploy -c scope=platform ReportingStack-poc-dev
+cdk deploy -c scope=platform GlobalUiStack-dev PortalStack-dev
+cdk deploy -c scope=platform GlobalDnsStack-dev
 ```
 
-DNA semantic layer (transformations, gold publish) stays in **DnaStack** per company. Client reporting UI (charts, KPIs) is in **ReportingStack** per portal client. The global site and login live in **GlobalUiStack**.
+DNA semantic layer (transformations, gold publish) stays in **DnaStack** per company. Client reporting UI (charts, KPIs) is **one** shared **PortalStack** for every client — the tenant is resolved per request from the Cognito `client_id` claim and PortalStack assumes `hiveflow-portal-tenant-{company}-{env}` (minted by `DnaStack`) for that client's data. The global site and login live in **GlobalUiStack**. Every client is reached via the `*.{zone}` wildcard in **GlobalDnsStack** — no per-client stack or DNS record.
 
 ```powershell
 cdk deploy DnaStack-POC-dev
-cdk deploy -c scope=platform GlobalUiStack-dev
-cdk deploy -c scope=platform ReportingStack-poc-dev
+cdk deploy -c scope=platform GlobalUiStack-dev PortalStack-dev
 ```
 
 Ingest-only deploy:

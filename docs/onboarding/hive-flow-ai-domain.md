@@ -17,7 +17,7 @@ If GlobalUi deploy fails with *Cannot delete export ... in use by GlobalDnsStack
 cdk deploy GlobalDnsStack-dev -c scope=platform --exclusively -c dnsManageBasePathMappings=false
 
 # 2. Deploy the UI Lambda fix and refresh API exports on both stacks
-cdk deploy GlobalUiStack-dev ReportingStack-poc-dev -c scope=platform --exclusively
+cdk deploy GlobalUiStack-dev PortalStack-dev -c scope=platform --exclusively
 
 # 3. Recreate base path mappings (uses stack exports from step 2)
 cdk deploy GlobalDnsStack-dev -c scope=platform --exclusively
@@ -51,7 +51,7 @@ domain:
 ```
 
 ```powershell
-cdk deploy -c scope=platform GlobalUiStack-dev ReportingStack-poc-dev GlobalDnsStack-dev
+cdk deploy -c scope=platform GlobalUiStack-dev PortalStack-dev GlobalDnsStack-dev
 ```
 
 Copy `HostedZoneId` and `Route53NameServers` from **GlobalDnsStack** outputs, update Squarespace nameservers, then switch to steady-state config:
@@ -86,7 +86,7 @@ cdk deploy GlobalDnsStack-dev
 
 Then set `manage_dns: false` again for routine deploys.
 
-Per-portal-client reporting subdomains (`poc.hive-flow-ai.com`) are also created by **GlobalDnsStack** during DNS bootstrap.
+Client reporting subdomains use a single `*.hive-flow-ai.com` wildcard record + ACM cert (created by **GlobalDnsStack**) that routes every `<client>.hive-flow-ai.com` to the shared **PortalStack** API. Adding a client needs no DNS or cert change. (`-c legacyReporting=true` re-creates the retired per-client single-name certs/domains/records for the cut-over/rollback window; an exact-match custom domain always wins over the wildcard.)
 
 ## Stack outputs
 
@@ -97,8 +97,8 @@ Per-portal-client reporting subdomains (`poc.hive-flow-ai.com`) are also created
 | `HostedZoneId` | GlobalDnsStack | Route 53 zone ID for config |
 | `SiteUrl` | GlobalUiStack | Branded URL from config (same hostname when DNS is configured) |
 | `ApiGatewayUrl` | GlobalUiStack | Default `execute-api` URL |
-| `ReportingWebUrl` | ReportingStack | Client reporting URL from config |
-| `ReportingSiteUrl` | GlobalDnsStack | Client subdomain URL after DNS bootstrap |
+| `ApiGatewayUrl` | PortalStack | Multi-tenant portal `execute-api` URL |
+| `PortalWildcardSiteUrl` | GlobalDnsStack | `https://<client>.{zone}/` pattern served by the wildcard |
 
 ## Reusing an existing hosted zone
 

@@ -280,11 +280,12 @@ def _gold_columns(settings: DnaSettings, output_id: str) -> list[str]:
 
     key = gold_dna_entity_parquet_key(output_id)
     if settings.s3_bucket:
-        import boto3
         from botocore.exceptions import ClientError
 
+        from hiveflow.storage.aws import s3_client
+
         try:
-            payload = boto3.client("s3").get_object(Bucket=settings.s3_bucket, Key=key)["Body"].read()
+            payload = s3_client().get_object(Bucket=settings.s3_bucket, Key=key)["Body"].read()
         except ClientError:
             return []
         return [str(field.name) for field in pq.read_schema(io.BytesIO(payload))]

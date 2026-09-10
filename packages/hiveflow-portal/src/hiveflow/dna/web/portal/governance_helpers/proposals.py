@@ -260,9 +260,9 @@ def load_open_proposal_id(settings: DnaSettings) -> str | None:
     candidates: list[tuple[str, str]] = []
 
     if settings.s3_bucket:
-        import boto3
+        from hiveflow.storage.aws import s3_client
 
-        client = boto3.client("s3")
+        client = s3_client()
         paginator = client.get_paginator("list_objects_v2")
         for page in paginator.paginate(Bucket=settings.s3_bucket, Prefix=prefix):
             for obj in page.get("Contents") or []:

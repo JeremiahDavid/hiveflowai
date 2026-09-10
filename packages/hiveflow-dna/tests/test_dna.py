@@ -676,16 +676,17 @@ def test_global_dns_stack_enabled_after_bootstrap() -> None:
     assert is_global_dns_stack_enabled(env_config) is True
 
 
-def test_deploy_stack_names_includes_global_dns_for_platform_scope() -> None:
+def test_deploy_stack_names_onboards_data_plane_only() -> None:
     from hiveflow.project_config import deploy_stack_names
 
-    names = deploy_stack_names(
-        company="poc2",
-        environment="dev",
-        client_id="poc2",
-        scope="platform",
-    )
-    assert names == ["ReportingStack-poc2-dev", "GlobalDnsStack-dev"]
+    # Onboarding provisions only the client data plane now; the shared
+    # PortalStack + wildcard DNS are environment-level, not per client.
+    assert deploy_stack_names(
+        company="poc2", environment="dev", client_id="poc2", scope="platform"
+    ) == []
+    assert deploy_stack_names(
+        company="poc2", environment="dev", client_id="poc2", scope="all"
+    ) == ["IngestStack-POC2-dev", "DnaStack-POC2-dev"]
 
 def test_resolve_dna_settings_global_ui_skips_bucket(monkeypatch: pytest.MonkeyPatch) -> None:
     from hiveflow.dna.runtime import resolve_dna_settings

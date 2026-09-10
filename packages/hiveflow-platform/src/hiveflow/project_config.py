@@ -395,6 +395,19 @@ def reporting_stack_name(client_id: str, environment: str) -> str:
     return f"ReportingStack-{slug}-{environment.strip().lower()}"
 
 
+def portal_stack_name(environment: str) -> str:
+    """The single multi-tenant reporting portal stack (replaces per-client ReportingStack)."""
+    return f"PortalStack-{environment.strip().lower()}"
+
+
+def portal_stack_module_name() -> str:
+    return "portal_stack"
+
+
+def portal_web_api_export_name(environment: str) -> str:
+    return f"hiveflow-portal-{environment.strip().lower()}-web-api-id"
+
+
 def deploy_stack_names(
     *,
     company: str,
@@ -413,14 +426,9 @@ def deploy_stack_names(
                 dna_stack_name(company, environment, path=path),
             ]
         )
-    if scope_normalized in ("all", "platform") and client_id:
-        names.append(reporting_stack_name(client_id, environment))
-        try:
-            platform_env = get_platform_environment_config(environment, path=path)
-            if is_global_dns_stack_enabled(platform_env):
-                names.append(global_dns_stack_name(environment))
-        except KeyError:
-            pass
+    # Onboarding a client no longer deploys a per-client ReportingStack or touches
+    # DNS — the shared PortalStack + `*.{zone}` wildcard already serve every
+    # client. PortalStack is deployed once at platform scope by the operator.
     return names
 
 

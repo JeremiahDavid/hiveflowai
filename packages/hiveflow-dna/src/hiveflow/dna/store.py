@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from hiveflow.dna.settings import DnaSettings
+from hiveflow.storage.aws import s3_client
 from hiveflow.storage.paths import prefix_path
 
 
@@ -115,10 +116,8 @@ def read_production_output(settings: DnaSettings, output_id: str) -> list[dict[s
 
 def write_json_artifact(settings: DnaSettings, relative_key: str, payload: dict[str, Any]) -> str:
     if settings.s3_bucket:
-        import boto3
-
         body = json.dumps(payload, indent=2).encode("utf-8")
-        boto3.client("s3").put_object(
+        s3_client().put_object(
             Bucket=settings.s3_bucket,
             Key=relative_key,
             Body=body,
@@ -141,9 +140,7 @@ def write_text_artifact(
 ) -> str:
     body = text.encode("utf-8")
     if settings.s3_bucket:
-        import boto3
-
-        boto3.client("s3").put_object(
+        s3_client().put_object(
             Bucket=settings.s3_bucket,
             Key=relative_key,
             Body=body,
@@ -159,10 +156,9 @@ def write_text_artifact(
 
 def read_text_artifact(settings: DnaSettings, relative_key: str) -> str | None:
     if settings.s3_bucket:
-        import boto3
         from botocore.exceptions import ClientError
 
-        client = boto3.client("s3")
+        client = s3_client()
         try:
             response = client.get_object(Bucket=settings.s3_bucket, Key=relative_key)
         except ClientError as exc:
@@ -201,10 +197,9 @@ def read_yaml_artifact(settings: DnaSettings, relative_key: str) -> dict[str, An
 
 def read_json_artifact(settings: DnaSettings, relative_key: str) -> dict[str, Any] | None:
     if settings.s3_bucket:
-        import boto3
         from botocore.exceptions import ClientError
 
-        client = boto3.client("s3")
+        client = s3_client()
         try:
             response = client.get_object(Bucket=settings.s3_bucket, Key=relative_key)
         except ClientError as exc:
@@ -228,9 +223,7 @@ def list_json_artifact_keys(settings: DnaSettings, prefix: str) -> list[str]:
         normalized += "/"
 
     if settings.s3_bucket:
-        import boto3
-
-        client = boto3.client("s3")
+        client = s3_client()
         keys: list[str] = []
         token: str | None = None
         while True:

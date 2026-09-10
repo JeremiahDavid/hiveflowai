@@ -120,6 +120,20 @@ class PortalClientAccessError(Exception):
         super().__init__(message)
 
 
+class PortalTenantUnresolved(Exception):
+    """A reporting request could not be bound to a configured tenant.
+
+    Raised by ``_portal_settings`` in multi-tenant mode when the session's
+    ``client_id`` has no ``reporting_company`` in the registry. Callers must
+    translate this to HTTP 403 — never fall back to env-var base settings for a
+    real tenant request.
+    """
+
+    def __init__(self, message: str = "Reporting tenant is not configured.") -> None:
+        self.message = message
+        super().__init__(message)
+
+
 def authorize_portal_client_access(
     *,
     username: str,

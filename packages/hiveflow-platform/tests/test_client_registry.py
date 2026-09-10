@@ -277,16 +277,15 @@ def test_get_client_matches_reporting_company_case_insensitively(tmp_path: Path)
     assert record.client_id == "poc2"
 
 
-def test_expected_stack_names_includes_global_dns_when_enabled(config_path: Path) -> None:
-    from hiveflow.project_config import get_platform_environment_config, global_dns_stack_name, is_global_dns_stack_enabled
-
+def test_expected_stack_names_is_data_plane_only(config_path: Path) -> None:
+    # The reporting UI is the shared PortalStack and DNS is the wildcard —
+    # a client's expected stacks are just its data plane.
     registry = ClientRegistry(path=config_path)
     record = registry.get_client("poc2", environment="dev", client_id="poc2")
     assert record is not None
     names = registry.expected_stack_names(record)
-    assert "ReportingStack-poc2-dev" in names
-    if is_global_dns_stack_enabled(get_platform_environment_config("dev", path=config_path)):
-        assert global_dns_stack_name("dev") in names
+    assert any(n.startswith("IngestStack-") for n in names)
+    assert not any("ReportingStack" in n or "GlobalDnsStack" in n for n in names)
 
 
 def test_merge_stack_status_with_build_masks_stale_complete() -> None:

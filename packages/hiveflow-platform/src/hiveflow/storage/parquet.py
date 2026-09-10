@@ -7,6 +7,7 @@ import json
 from datetime import datetime
 
 from hiveflow.compat import UTC
+from hiveflow.storage.aws import s3_client
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -86,10 +87,9 @@ def read_json_local(path: Path) -> dict[str, Any] | None:
 
 
 def read_json_s3(bucket: str, key: str) -> dict[str, Any] | None:
-    import boto3
     from botocore.exceptions import ClientError
 
-    client = boto3.client("s3")
+    client = s3_client()
     try:
         response = client.get_object(Bucket=bucket, Key=key)
     except ClientError as exc:
@@ -101,13 +101,11 @@ def read_json_s3(bucket: str, key: str) -> dict[str, Any] | None:
 
 
 def write_json_s3(settings: LakeDestination, key: str, payload: dict[str, Any]) -> str:
-    import boto3
-
     if not settings.s3_bucket:
         raise ValueError("s3_bucket is required for S3 writes")
 
     body = json.dumps(payload, indent=2).encode("utf-8")
-    boto3.client("s3").put_object(
+    s3_client().put_object(
         Bucket=settings.s3_bucket,
         Key=key,
         Body=body,
@@ -117,12 +115,10 @@ def write_json_s3(settings: LakeDestination, key: str, payload: dict[str, Any]) 
 
 
 def write_parquet_s3(settings: LakeDestination, key: str, rows: list[dict[str, Any]]) -> str:
-    import boto3
-
     if not settings.s3_bucket:
         raise ValueError("s3_bucket is required for S3 writes")
 
-    boto3.client("s3").put_object(
+    s3_client().put_object(
         Bucket=settings.s3_bucket,
         Key=key,
         Body=rows_to_parquet_bytes(rows),
@@ -142,11 +138,10 @@ def read_parquet_local(path: Path) -> list[dict[str, Any]]:
 
 
 def read_parquet_s3(bucket: str, key: str) -> list[dict[str, Any]]:
-    import boto3
     import pyarrow.parquet as pq
     from botocore.exceptions import ClientError
 
-    client = boto3.client("s3")
+    client = s3_client()
     try:
         response = client.get_object(Bucket=bucket, Key=key)
     except ClientError as exc:

@@ -7,7 +7,12 @@ from aws_cdk import CfnOutput, Stack, Tags
 from aws_cdk import aws_route53 as route53
 from constructs import Construct
 
-from ui_domain import attach_admin_subdomain, attach_client_subdomain, attach_custom_domain
+from ui_domain import (
+    attach_admin_subdomain,
+    attach_client_subdomain,
+    attach_custom_domain,
+    attach_wildcard_portal_domain,
+)
 
 
 @dataclass(frozen=True)
@@ -41,6 +46,7 @@ class GlobalDnsStack(Stack):
         ui_config: dict[str, Any],
         global_rest_api_id: str,
         reporting_targets: list[ReportingDnsTarget] | None = None,
+        wildcard_portal_api_id: str | None = None,
         admin_target: AdminDnsTarget | None = None,
         manage_base_path_mappings: bool = True,
         **kwargs,
@@ -70,6 +76,15 @@ class GlobalDnsStack(Stack):
                 hosted_zone=self.hosted_zone,
                 zone_name=zone_name,
                 client_hostname=target.reporting_hostname or target.client_id,
+                manage_base_path_mappings=manage_base_path_mappings,
+            )
+
+        if wildcard_portal_api_id and self.hosted_zone is not None:
+            attach_wildcard_portal_domain(
+                self,
+                rest_api_id=wildcard_portal_api_id,
+                hosted_zone=self.hosted_zone,
+                zone_name=zone_name,
                 manage_base_path_mappings=manage_base_path_mappings,
             )
 
