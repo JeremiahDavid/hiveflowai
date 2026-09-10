@@ -1,4 +1,12 @@
-"""Bedrock semantic interpretation of profiled spreadsheet tables."""
+"""Bedrock semantic interpretation of profiled spreadsheet tables.
+
+The default path runs a tool-capable Claude Agent SDK session (``_agent_interpret``)
+that inspects the actual workbook before proposing an entity name / grain / schema
+per table. When the Agent SDK runtime is unavailable (no Node / not a container
+Lambda) it falls back to the original single-shot ``converse`` call, and when that
+also fails every table gets ``_heuristic_table``. The output dict shape is
+identical in all three cases.
+"""
 
 from __future__ import annotations
 
@@ -8,6 +16,8 @@ import re
 from typing import Any, Callable
 
 from botocore.config import Config
+
+from hiveflow.spreadsheet._agent_runtime import agent_available, run_tool_agent
 
 INTERPRET_KIND = "spreadsheet_engine_report"
 DEFAULT_BEDROCK_MODEL_ID = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
@@ -115,13 +125,126 @@ def _heuristic_table(
     }
 
 
+_AGENT_SYSTEM = (
+    _SYSTEM_PROMPT
+    + """
+
+You are running as an agent with tools over the real workbook:
+- list_sheets / get_sheet_map / read_range — inspect layout, headers, and values.
+- record_interpretation — call ONCE per table_id below with your proposal
+  (entity_name, purpose, grain, confidence, schema, relationships, notes).
+- finish — call once after every table_id has a recorded interpretation.
+
+Inspect each region with the tools before recording it. Use the deterministic
+profiling stats you are given plus what you read from the sheet. Do not emit the
+final JSON as text — the record_interpretation tool calls are the output."""
+)
+
+
+def _agent_interpret(
+    user_payload: dict[str, Any],
+    workbook_path: str,
+    *,
+    model: str | None,
+    max_budget_usd: float | None,
+) -> tuple[dict[str, dict[str, Any]], float | None]:
+    """Tool-capable Agent SDK pass. Returns ``({table_id: proposal}, cost_usd)``."""
+    from claude_agent_sdk import create_sdk_mcp_server, tool
+
+    from hiveflow_core import json_default, mcp_tool_name
+    from hiveflow_spreadsheet_parser.readers import read_workbook
+    from hiveflow_spreadsheet_parser.tools import ParseSession, build_tool_server
+
+    wb = read_workbook(workbook_path)
+    session = ParseSession(workbook=wb)
+    sheets_server = build_tool_server(session)
+
+    recorded: dict[str, dict[str, Any]] = {}
+    valid_ids = {str(t.get("table_id")) for t in user_payload.get("tables") or []}
+
+    def _ok(payload: Any) -> dict[str, Any]:
+        return {"content": [{"type": "text", "text": json.dumps(payload, default=json_default)}]}
+
+    @tool(
+        "record_interpretation",
+        "Record the semantic proposal for one table_id.",
+        {
+            "type": "object",
+            "properties": {
+                "table_id": {"type": "string"},
+                "entity_name": {"type": "string"},
+                "purpose": {"type": "string"},
+                "grain": {"type": "string"},
+                "confidence": {"type": "number"},
+                "schema": {"type": "array", "items": {"type": "object"}},
+                "relationships": {"type": "array", "items": {"type": "object"}},
+                "notes": {"type": "array", "items": {"type": "string"}},
+            },
+            "required": ["table_id", "entity_name", "grain", "schema"],
+            "additionalProperties": True,
+        },
+    )
+    async def record_interpretation(args: dict[str, Any]) -> dict[str, Any]:
+        tid = str(args.get("table_id") or "")
+        if tid not in valid_ids:
+            return {
+                "content": [{"type": "text", "text": f"Error: unknown table_id {tid!r}"}],
+                "is_error": True,
+            }
+        recorded[tid] = {
+            "table_id": tid,
+            "entity_name": args.get("entity_name"),
+            "purpose": args.get("purpose", ""),
+            "grain": args.get("grain", ""),
+            "confidence": args.get("confidence", 0.0),
+            "schema": args.get("schema") or [],
+            "relationships": args.get("relationships") or [],
+            "notes": args.get("notes") or [],
+        }
+        return _ok({"recorded": tid, "remaining": sorted(valid_ids - set(recorded))})
+
+    @tool("finish", "Call once every table_id has a recorded interpretation.", {})
+    async def finish(_args: dict[str, Any]) -> dict[str, Any]:
+        return _ok({"recorded": sorted(recorded), "missing": sorted(valid_ids - set(recorded))})
+
+    interpret_server = create_sdk_mcp_server(
+        name="interpret", version="0.1.0", tools=[record_interpretation, finish]
+    )
+    allowed = [
+        mcp_tool_name("sheets", "list_sheets"),
+        mcp_tool_name("sheets", "get_sheet_map"),
+        mcp_tool_name("sheets", "read_range"),
+        mcp_tool_name("interpret", "record_interpretation"),
+        mcp_tool_name("interpret", "finish"),
+    ]
+    outcome = run_tool_agent(
+        _AGENT_SYSTEM,
+        json.dumps(user_payload, default=str),
+        mcp_servers={"sheets": sheets_server, "interpret": interpret_server},
+        allowed_tools=allowed,
+        max_turns=8 + 4 * len(valid_ids),
+        max_budget_usd=max_budget_usd,
+        model=model,
+    )
+    return recorded, outcome.cost_usd
+
+
 def interpret_tables(
     parse_payload: dict[str, Any],
     profile_payload: dict[str, Any],
     *,
     invoke: Callable[[str, str], str] | None = None,
+    workbook_path: str | None = None,
+    model: str | None = None,
+    max_budget_usd: float | None = None,
 ) -> dict[str, Any]:
-    """Produce semantic proposals for each profiled table."""
+    """Produce semantic proposals for each profiled table.
+
+    ``workbook_path`` enables the tool-capable agent pass when the Agent SDK
+    runtime is active. ``invoke`` keeps its original tri-state contract
+    (``None`` = real Bedrock, callable = custom transport, ``False`` = skip the
+    model entirely) so existing callers and tests are unaffected.
+    """
     parse_tables = {
         str(t.get("table_id")): t
         for t in (parse_payload.get("tables") or [])
@@ -147,7 +270,16 @@ def interpret_tables(
     }
     interpreted: list[dict[str, Any]] = []
     llm_tables: dict[str, dict[str, Any]] = {}
-    if invoke is not False:
+
+    if invoke is None and workbook_path and agent_available():
+        try:
+            llm_tables, _cost = _agent_interpret(
+                user_payload, workbook_path, model=model, max_budget_usd=max_budget_usd
+            )
+        except Exception:  # noqa: BLE001 — fall back to single-shot / heuristic
+            llm_tables = {}
+
+    if invoke is not False and not llm_tables:
         try:
             invoke_fn = invoke or _default_invoke
             raw = invoke_fn(_SYSTEM_PROMPT, json.dumps(user_payload, default=str))

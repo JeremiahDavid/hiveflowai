@@ -1,16 +1,38 @@
 from __future__ import annotations
 
+import os
 from typing import Any
 
 from aws_cdk import Duration
+from aws_cdk import aws_ecr_assets as ecr_assets
 from aws_cdk import aws_lambda as _lambda
 from aws_cdk import aws_s3 as s3
 from aws_cdk import aws_stepfunctions as sfn
 from aws_cdk import aws_stepfunctions_tasks as tasks
 from constructs import Construct
 
-from lambda_bundle import HiveFlowLambdaRuntime
+from lambda_bundle import PROJECT_ROOT, HiveFlowLambdaRuntime
 from hiveflow.process_config import Process, lambda_name_for_process, step_function_name_for_process
+
+# Bump to force the interpret/propose container images to rebuild + redeploy.
+AGENT_IMAGE_REVISION = "20260910-agent-sdk-interpret"
+
+# Default Bedrock model for the Agent SDK path (converse fallback keeps
+# HIVEFLOW_BEDROCK_MODEL_ID). Overridable via the HIVEFLOW_AGENT_MODEL /
+# HIVEFLOW_AGENT_MAX_BUDGET_USD env vars at synth time.
+_AGENT_MODEL = os.getenv("HIVEFLOW_AGENT_MODEL", "us.anthropic.claude-sonnet-5")
+_AGENT_MAX_BUDGET_USD = os.getenv("HIVEFLOW_AGENT_MAX_BUDGET_USD", "1.00")
+
+
+def _agent_image_code(handler: str) -> _lambda.DockerImageCode:
+    """Container image for an Agent-SDK spreadsheet stage (Node + `claude` CLI)."""
+    return _lambda.DockerImageCode.from_image_asset(
+        str(PROJECT_ROOT),
+        file="infra/agent_image/Dockerfile",
+        cmd=[handler],
+        platform=ecr_assets.Platform.LINUX_AMD64,
+        build_args={"AGENT_IMAGE_REVISION": AGENT_IMAGE_REVISION},
+    )
 
 
 def _apply_lambda_throttle_retry(task: tasks.LambdaInvoke) -> tasks.LambdaInvoke:
@@ -67,35 +89,40 @@ def create_spreadsheet_pipeline(
         layers=lambda_runtime.layers,
         environment=common_env,
     )
-    interpret_fn = _lambda.Function(
+    # interpret + propose run the vendored Claude Agent SDK (Node + `claude` CLI),
+    # so they ship as container images instead of the wheel-only zip. The Step
+    # Functions chain, `job_id` payload, and IAM below are unchanged.
+    agent_env = {
+        **common_env,
+        "ANTHROPIC_MODEL": _AGENT_MODEL,
+        "MAX_BUDGET_USD": _AGENT_MAX_BUDGET_USD,
+        # HIVEFLOW_AGENT_RUNTIME=sdk and CLAUDE_CODE_USE_BEDROCK=1 are baked into
+        # the image; HIVEFLOW_BEDROCK_MODEL_ID (in common_env) drives the
+        # converse fallback if the CLI is somehow unavailable.
+    }
+    interpret_fn = _lambda.DockerImageFunction(
         scope,
         f"{prefix}SpreadsheetInterpretFunction",
         function_name=lambda_name_for_process(
             company, environment, "all", Process.SPREADSHEET_INTERPRET
         ),
-        runtime=_lambda.Runtime.PYTHON_3_12,
-        handler="hiveflow.spreadsheet.handlers.interpret_handler",
-        timeout=Duration.minutes(10),
-        memory_size=1024,
-        description="Spreadsheet Engine: Bedrock semantic analysis of spreadsheet tables",
-        code=lambda_runtime.code,
-        layers=lambda_runtime.layers,
-        environment=common_env,
+        code=_agent_image_code("hiveflow.spreadsheet.handlers.interpret_handler"),
+        timeout=Duration.minutes(15),
+        memory_size=2048,
+        description="Spreadsheet Engine: Agent SDK semantic analysis of spreadsheet tables",
+        environment=agent_env,
     )
-    propose_fn = _lambda.Function(
+    propose_fn = _lambda.DockerImageFunction(
         scope,
         f"{prefix}SpreadsheetProposeFunction",
         function_name=lambda_name_for_process(
             company, environment, "all", Process.SPREADSHEET_PROPOSE
         ),
-        runtime=_lambda.Runtime.PYTHON_3_12,
-        handler="hiveflow.spreadsheet.handlers.propose_handler",
-        timeout=Duration.minutes(10),
-        memory_size=1024,
-        description="Spreadsheet Engine: propose transformations from knowledge base",
-        code=lambda_runtime.code,
-        layers=lambda_runtime.layers,
-        environment=common_env,
+        code=_agent_image_code("hiveflow.spreadsheet.handlers.propose_handler"),
+        timeout=Duration.minutes(15),
+        memory_size=2048,
+        description="Spreadsheet Engine: Agent SDK transformation proposals",
+        environment=agent_env,
     )
 
     for fn in (parse_fn, profile_fn, interpret_fn, propose_fn):

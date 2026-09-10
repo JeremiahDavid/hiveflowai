@@ -1,0 +1,11 @@
+report_property,report_property_value
+Extension ID,437dbf0e-84ff-417a-965d-ed2bb9650972
+Extension Name,Base Application by Microsoft
+Extension Publisher,Microsoft
+Extension Version,28.3.52162.53387
+Object ID,107
+Object Name,Customer - Order Summary
+Object Caption,Customer - Order Summary
+About This Report Title,About Customer - Order Summary
+About This Report Text,"Analyse your nonshipped orders in order to understand your expected sales volume. See order details with the quantity not yet shipped for each customer in three periods of 30 days each, starting from the specified date."
+Report help link,

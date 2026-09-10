@@ -426,3 +426,37 @@ def require_portal_admin(
     from hiveflow.dna.web.portal.cognito import portal_user_is_admin
 
     return portal_user_is_admin(username, company=company, environment=environment)
+
+
+# ── Starlette / FastAPI edges ────────────────────────────────────────────────
+#
+# The functions above take a ``werkzeug`` Request/Response. During the
+# incremental FastAPI migration native routes need Starlette equivalents.
+# ``session_from_request`` / ``set_session_cookie`` / ``clear_session_cookie``
+# already duck-type across both frameworks (``.cookies`` dict, matching
+# ``set_cookie`` / ``delete_cookie`` kwargs), so only the request-introspecting
+# ``require_portal_session`` needs a variant.
+
+
+def _starlette_next_path(request: Any) -> str:
+    """``path[?query]`` for a Starlette request (mirrors werkzeug ``full_path``)."""
+    query = request.url.query
+    return request.url.path + (f"?{query}" if query else "")
+
+
+def require_portal_session_starlette(
+    request: Any,
+    *,
+    company: str,
+    environment: str,
+    login_url: str,
+):
+    """Return ``(session, redirect_response_or_None)`` for a Starlette request."""
+    from starlette.responses import RedirectResponse
+
+    session = session_from_request(request, company=company, environment=environment)
+    if session is not None:
+        return session, None
+    next_path = _starlette_next_path(request)
+    location = f"{login_url}?next={next_path}" if next_path and next_path != "?" else login_url
+    return None, RedirectResponse(location, status_code=302)

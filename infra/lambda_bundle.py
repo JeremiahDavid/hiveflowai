@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import shutil
 import subprocess
 import sys
@@ -134,6 +135,131 @@ def _pip_install_command(output_dir: str, profile: LambdaDepsProfile) -> list[st
     ]
 
 
+# ── Dependency install cache ─────────────────────────────────────────────────
+#
+# The combined asset hash deliberately covers every hiveflow source file, so any
+# code edit yields a new asset and CDK re-runs bundling. Re-running `pip install`
+# as part of that is pure waste — the wheels only change when the requirements
+# file does, but a full reinstall of the reporting profile costs ~50s even with
+# a warm pip cache (it re-extracts ~190MB of wheels).
+#
+# So: install once into a persistent cache keyed only by the inputs that
+# actually affect the result, then hardlink that tree into each new bundle.
+# Hardlinks make the reuse near-free and cost no extra disk; CDK only ever reads
+# these files (to zip them) and deleting cdk.out just drops the link, leaving
+# the cache intact.
+#
+# Escape hatches: set HIVEFLOW_BUNDLE_CACHE=0 to bypass the cache entirely, or
+# delete the cache directory to force a clean reinstall. Both fall back to the
+# original install-straight-into-the-bundle behavior.
+
+DEPS_CACHE_VERSION = "1"
+
+DEPS_CACHE_ROOT = Path(
+    os.environ.get("HIVEFLOW_BUNDLE_CACHE_DIR") or PROJECT_ROOT / ".cdk-bundle-cache"
+)
+
+_CACHE_COMPLETE_MARKER = ".deps-complete"
+
+
+def _deps_cache_enabled() -> bool:
+    return os.environ.get("HIVEFLOW_BUNDLE_CACHE", "").strip().lower() not in {
+        "0",
+        "false",
+        "no",
+    }
+
+
+def _deps_cache_key(profile: LambdaDepsProfile) -> str:
+    """Hash of only what changes the installed tree — not the app source."""
+    digest = hashlib.sha256(
+        f"{DEPS_CACHE_VERSION}:{profile}:{PIP_PLATFORM}:{PIP_PYTHON}".encode("utf-8")
+    )
+    digest.update(_requirements_path(profile).read_bytes())
+    return digest.hexdigest()[:32]
+
+
+def _link_tree(src: Path, dest: Path, *, skip: frozenset[str] = frozenset()) -> None:
+    """Mirror ``src`` into ``dest`` using hardlinks, copying when links fail.
+
+    Links can fail across filesystems or on filesystems without hardlink
+    support; a copy is always correct, just slower.
+    """
+    dest.mkdir(parents=True, exist_ok=True)
+    for entry in src.rglob("*"):
+        rel = entry.relative_to(src)
+        if rel.parts[0] in skip:
+            continue
+        target = dest / rel
+        if entry.is_dir():
+            target.mkdir(parents=True, exist_ok=True)
+            continue
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if target.exists():
+            continue
+        try:
+            os.link(entry, target)
+        except OSError:
+            shutil.copy2(entry, target)
+
+
+def _cached_deps_dir(profile: LambdaDepsProfile) -> Path | None:
+    """Installed-dependency tree for ``profile``, populating the cache if cold.
+
+    Returns None when caching is disabled or the install fails, so callers can
+    fall back to installing directly into the bundle.
+    """
+    if not _deps_cache_enabled():
+        return None
+
+    cache_dir = DEPS_CACHE_ROOT / f"{profile}-{_deps_cache_key(profile)}"
+    if (cache_dir / _CACHE_COMPLETE_MARKER).is_file():
+        return cache_dir
+
+    # Install into a staging dir and rename into place, so an interrupted or
+    # failed install never leaves a half-populated tree that looks usable.
+    staging = DEPS_CACHE_ROOT / f".staging-{profile}-{os.getpid()}"
+    shutil.rmtree(staging, ignore_errors=True)
+    try:
+        staging.mkdir(parents=True, exist_ok=True)
+        subprocess.run(
+            _pip_install_command(str(staging), profile),
+            check=True,
+            capture_output=True,
+        )
+        (staging / _CACHE_COMPLETE_MARKER).write_text(f"{profile}\n", encoding="utf-8")
+        shutil.rmtree(cache_dir, ignore_errors=True)
+        staging.rename(cache_dir)
+    except (subprocess.CalledProcessError, OSError):
+        shutil.rmtree(staging, ignore_errors=True)
+        # A concurrent build may have completed the same cache entry.
+        if (cache_dir / _CACHE_COMPLETE_MARKER).is_file():
+            return cache_dir
+        return None
+    return cache_dir
+
+
+def _materialize_deps(dest: Path, profile: LambdaDepsProfile) -> bool:
+    """Populate ``dest`` with the profile's installed dependencies."""
+    cache_dir = _cached_deps_dir(profile)
+    if cache_dir is None:
+        try:
+            subprocess.run(
+                _pip_install_command(str(dest), profile),
+                check=True,
+                capture_output=True,
+            )
+        except subprocess.CalledProcessError:
+            return False
+        return True
+
+    try:
+        _link_tree(cache_dir, dest, skip=frozenset({_CACHE_COMPLETE_MARKER}))
+    except OSError:
+        return False
+    return True
+
+
 def _copy_runtime_config(output_dir: Path) -> None:
     shutil.copy2(PROJECT_ROOT / "config.yaml", output_dir / "config.yaml")
     process_config = PROJECT_ROOT / "process_config.yaml"
@@ -151,15 +277,7 @@ class LocalPythonDepsBundling:
     def try_bundle(self, output_dir: str, _options: BundlingOptions) -> bool:
         python_dir = Path(output_dir) / "python"
         python_dir.mkdir(parents=True, exist_ok=True)
-        try:
-            subprocess.run(
-                _pip_install_command(str(python_dir), self._profile),
-                check=True,
-                capture_output=True,
-            )
-        except subprocess.CalledProcessError:
-            return False
-        return True
+        return _materialize_deps(python_dir, self._profile)
 
 
 @jsii.implements(ILocalBundling)
@@ -170,19 +288,17 @@ class LocalPythonCombinedBundling:
         self._profile = profile
 
     def try_bundle(self, output_dir: str, _options: BundlingOptions) -> bool:
+        out = Path(output_dir)
+        if not _materialize_deps(out, self._profile):
+            return False
         try:
-            subprocess.run(
-                _pip_install_command(output_dir, self._profile),
-                check=True,
-                capture_output=True,
-            )
-            assemble_hiveflow_tree(Path(output_dir) / "hiveflow")
-            _copy_runtime_config(Path(output_dir))
-            (Path(output_dir) / ".hiveflow-bundle-rev").write_text(
+            assemble_hiveflow_tree(out / "hiveflow")
+            _copy_runtime_config(out)
+            (out / ".hiveflow-bundle-rev").write_text(
                 f"{UI_BUNDLE_REVISION}:{self._profile}\n",
                 encoding="utf-8",
             )
-        except (subprocess.CalledProcessError, OSError):
+        except OSError:
             return False
         return True
 

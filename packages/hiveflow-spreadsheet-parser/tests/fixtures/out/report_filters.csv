@@ -1,0 +1,5 @@
+filter,filter_value
+Sales Line::Sales Line::2::Document Type,1
+Sales Line::Sales Line::2::Outstanding Quantity,<>0
+Sales Line::Sales Line::4::Bill-to Customer No.,50000
+SalesLineBuffer_Integer::Integer::0::Number,1..5

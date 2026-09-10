@@ -1,0 +1,39 @@
+caption,value
+CurrencyCode_SalesLine,Currency Code
+Name_Cust,Name
+SalesLineBilltoNo_Customer,Bill-to Customer No.
+DataRetrieved,Data retrieved:
+CustomerOrderSummary,Customer Order Summary
+CustOrderSummaryLCYPrint,Cust. Order Summary $ (Print)
+CustomerOrderSummaryPrint,Customer Order Summary (Print)
+CustomerOrderSummaryAnalysis,Cust. Order Summary (Analysis)
+PostingDateFilterLabel,Posting Date Filter:
+AboutTheReportLabel,About the report
+EnvironmentLabel,Environment
+CompanyLabel,Company
+UserLabel,User
+RunOnLabel,Run on
+ReportNameLabel,Report name
+DocumentationLabel,Documentation
+StartingDateLbl,Starting Date
+BeforeLbl,...before ($)
+Before1Lbl,...before
+AfterLbl,after ($)...
+After1Lbl,after...
+OutstandingOrdersLbl,Outstanding Orders
+CustomerNoLbl,Customer No.
+CustomerNameLbl,Customer Name
+Period2StartDateLbl,Period 2 Start Date
+Period2EndDateLbl,Period 2 End Date
+Period3StartDateLbl,Period 3 Start Date
+Period3EndDateLbl,Period 3 End Date
+Period4StartDateLbl,Period 4 Start Date
+Period4EndDateLbl,Period 4 End Date
+SalesAmtOnOrderLCY2Lbl,Sales Amt. on Order ($) for Period 2
+SalesAmtOnOrder2Lbl,Sales Amt. on Order for Period 2
+SalesAmtOnOrderLCY3Lbl,Sales Amt. on Order ($) for Period 3
+SalesAmtOnOrder3Lbl,Sales Amt. on Order for Period 3
+SalesAmtOnOrderLCY4Lbl,Sales Amt. on Order ($) for Period 4
+SalesAmtOnOrder4Lbl,Sales Amt. on Order for Period 4
+TotalCaptionLbl,Total
+TotalLCYCaptionLbl,Total ($)

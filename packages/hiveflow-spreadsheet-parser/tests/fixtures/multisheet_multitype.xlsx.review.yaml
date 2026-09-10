@@ -1,0 +1,3501 @@
+# HiveFlow spreadsheet-parser — review file.
+# Edit column names / dtype / semantic / include / ordinal, adjust a1_range or
+# header_rows, then set `approved: true` on the tables you want written.
+# Run:  hiveflow-parse apply <this-file> --out out/
+kind: hiveflow.spreadsheet-parser/review
+version: 1
+source:
+  filename: multisheet_multitype.xlsx
+  sha256: 91d48b7abd71c545f2fbd832efe003174ef2c569b7542415c02072ba5863e7d8
+  bytes: 40339
+  format: xlsx
+  parsed_at: '2026-09-04T15:02:22.893728Z'
+  parser_version: 0.1.0
+tables:
+- id: Aggregated Metadata!A1:B11
+  name: report_properties
+  sheet: Aggregated Metadata
+  a1_range: A1:B11
+  kind: key_value
+  confidence: 0.6
+  header_rows: 1
+  orientation: rows
+  include: true
+  approved: true
+  dedupe_on: []
+  drop_duplicate_rows: false
+  agent_notes: 'Report-level metadata: Extension ID/Name/Publisher/Version, Object ID/Name/Caption, About-text,
+    help link. Row 11 ("Report help link") has no value in col B.'
+  cleanup_instructions: ''
+  detector_signals: []
+  profile:
+    row_count: 10
+    column_count: 2
+    empty_row_count: 0
+    duplicate_row_count: 0
+    candidate_key:
+    - report_property
+    header_rows: 1
+    has_totals_row: false
+  columns:
+  - source_name: report_property
+    name: report_property
+    ordinal: 0
+    dtype: string
+    semantic: free_text
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 10
+    is_unique: true
+    detected_format: null
+    sample_values:
+    - Extension ID
+    - Extension Name
+    - Extension Publisher
+    - Extension Version
+    - Object ID
+    top_values:
+    - - Extension ID
+      - 1
+    - - Extension Name
+      - 1
+    - - Extension Publisher
+      - 1
+    - - Extension Version
+      - 1
+    - - Object ID
+      - 1
+    min: null
+    max: null
+    mean: null
+    char_min: 9
+    char_max: 23
+  - source_name: report_property_value
+    name: report_property_value
+    ordinal: 1
+    dtype: string
+    semantic: free_text
+    include: true
+    nullable: true
+    null_count: 1
+    populated_pct: 90.0
+    distinct_count: 8
+    is_unique: false
+    detected_format: null
+    sample_values:
+    - 437dbf0e-84ff-417a-965d-ed2bb9650972
+    - Base Application by Microsoft
+    - Microsoft
+    - 28.3.52162.53387
+    - 107
+    top_values:
+    - - Customer - Order Summary
+      - 2
+    - - 437dbf0e-84ff-417a-965d-ed2bb9650972
+      - 1
+    - - Base Application by Microsoft
+      - 1
+    - - Microsoft
+      - 1
+    - - 28.3.52162.53387
+      - 1
+    min: null
+    max: null
+    mean: null
+    char_min: 3
+    char_max: 219
+- id: Aggregated Metadata!D1:E17
+  name: request_properties
+  sheet: Aggregated Metadata
+  a1_range: D1:E17
+  kind: key_value
+  confidence: 0.6
+  header_rows: 1
+  orientation: rows
+  include: true
+  approved: true
+  dedupe_on: []
+  drop_duplicate_rows: false
+  agent_notes: 'Request-execution context: Tenant IDs, environment, company, user, date/time, UTC offset,
+    language, format region, layout info. Rows 15–17 (Layout name/caption/id) have keys but empty values.
+    Sits in cols D:E, side-by-side with other metadata blocks on this sheet.'
+  cleanup_instructions: ''
+  detector_signals: []
+  profile:
+    row_count: 16
+    column_count: 2
+    empty_row_count: 0
+    duplicate_row_count: 0
+    candidate_key:
+    - request_property
+    header_rows: 1
+    has_totals_row: false
+  columns:
+  - source_name: request_property
+    name: request_property
+    ordinal: 0
+    dtype: string
+    semantic: free_text
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 16
+    is_unique: true
+    detected_format: null
+    sample_values:
+    - Tenant Entra Id
+    - Tenant Id
+    - Environment name
+    - Environment type
+    - Company name
+    top_values:
+    - - Tenant Entra Id
+      - 1
+    - - Tenant Id
+      - 1
+    - - Environment name
+      - 1
+    - - Environment type
+      - 1
+    - - Company name
+      - 1
+    min: null
+    max: null
+    mean: null
+    char_min: 4
+    char_max: 20
+  - source_name: request_property_value
+    name: request_property_value
+    ordinal: 1
+    dtype: string
+    semantic: free_text
+    include: true
+    nullable: true
+    null_count: 3
+    populated_pct: 81.2
+    distinct_count: 11
+    is_unique: false
+    detected_format: mm-dd-yy
+    sample_values:
+    - f2897767-3f5f-4f93-83f8-37aa51e753a7
+    - msft1a6720t11091664
+    - Production
+    - CRONUS USA, Inc.
+    - 34eb1c3d-8376-f111-a5bc-7c1e523f427b
+    top_values:
+    - - Production
+      - 2
+    - - CRONUS USA, Inc.
+      - 2
+    - - f2897767-3f5f-4f93-83f8-37aa51e753a7
+      - 1
+    - - msft1a6720t11091664
+      - 1
+    - - 34eb1c3d-8376-f111-a5bc-7c1e523f427b
+      - 1
+    min: null
+    max: null
+    mean: null
+    char_min: 2
+    char_max: 36
+- id: Aggregated Metadata!J1:K6
+  name: report_filters
+  sheet: Aggregated Metadata
+  a1_range: J1:K6
+  kind: key_value
+  confidence: 0.6
+  header_rows: 1
+  orientation: rows
+  include: true
+  approved: true
+  dedupe_on: []
+  drop_duplicate_rows: false
+  agent_notes: '5 active report filters: Document Type=1, Outstanding Quantity<>0, Bill-to Customer No.=50000,
+    SalesLineBuffer Number=1..5, Totals Number=1. Keys are fully-qualified table::view::indent::field
+    strings. Sits in cols J:K, side-by-side with other metadata blocks.'
+  cleanup_instructions: ''
+  detector_signals: []
+  profile:
+    row_count: 4
+    column_count: 2
+    empty_row_count: 0
+    duplicate_row_count: 0
+    candidate_key:
+    - filter
+    header_rows: 1
+    has_totals_row: true
+  columns:
+  - source_name: filter
+    name: filter
+    ordinal: 0
+    dtype: string
+    semantic: free_text
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 4
+    is_unique: true
+    detected_format: null
+    sample_values:
+    - Sales Line::Sales Line::2::Document Type
+    - Sales Line::Sales Line::2::Outstanding Quantity
+    - Sales Line::Sales Line::4::Bill-to Customer No.
+    - SalesLineBuffer_Integer::Integer::0::Number
+    top_values:
+    - - Sales Line::Sales Line::2::Document Type
+      - 1
+    - - Sales Line::Sales Line::2::Outstanding Quantity
+      - 1
+    - - Sales Line::Sales Line::4::Bill-to Customer No.
+      - 1
+    - - SalesLineBuffer_Integer::Integer::0::Number
+      - 1
+    min: null
+    max: null
+    mean: null
+    char_min: 40
+    char_max: 47
+  - source_name: filter_value
+    name: filter_value
+    ordinal: 1
+    dtype: string
+    semantic: free_text
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 4
+    is_unique: true
+    detected_format: null
+    sample_values:
+    - '1'
+    - <>0
+    - '50000'
+    - 1..5
+    top_values:
+    - - '1'
+      - 1
+    - - <>0
+      - 1
+    - - '50000'
+      - 1
+    - - 1..5
+      - 1
+    min: null
+    max: null
+    mean: null
+    char_min: 1
+    char_max: 5
+- id: CaptionData!A1:B39
+  name: caption_key_value_lookup
+  sheet: CaptionData
+  a1_range: A1:B39
+  kind: key_value
+  confidence: 0.8
+  header_rows: 1
+  orientation: rows
+  include: true
+  approved: true
+  dedupe_on: []
+  drop_duplicate_rows: false
+  agent_notes: 38 rows mapping internal caption identifiers (col A) to localised display strings (col
+    B). Used by the report to populate column headings and UI labels. Fully populated — no blank rows.
+  cleanup_instructions: ''
+  detector_signals: []
+  profile:
+    row_count: 38
+    column_count: 2
+    empty_row_count: 0
+    duplicate_row_count: 0
+    candidate_key:
+    - caption
+    header_rows: 1
+    has_totals_row: false
+  columns:
+  - source_name: caption
+    name: caption
+    ordinal: 0
+    dtype: string
+    semantic: free_text
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 38
+    is_unique: true
+    detected_format: null
+    sample_values:
+    - CurrencyCode_SalesLine
+    - Name_Cust
+    - SalesLineBilltoNo_Customer
+    - DataRetrieved
+    - CustomerOrderSummary
+    top_values:
+    - - CurrencyCode_SalesLine
+      - 1
+    - - Name_Cust
+      - 1
+    - - SalesLineBilltoNo_Customer
+      - 1
+    - - DataRetrieved
+      - 1
+    - - CustomerOrderSummary
+      - 1
+    min: null
+    max: null
+    mean: null
+    char_min: 8
+    char_max: 28
+  - source_name: value
+    name: value
+    ordinal: 1
+    dtype: string
+    semantic: free_text
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 38
+    is_unique: true
+    detected_format: null
+    sample_values:
+    - Currency Code
+    - Name
+    - Bill-to Customer No.
+    - 'Data retrieved:'
+    - Customer Order Summary
+    top_values:
+    - - Currency Code
+      - 1
+    - - Name
+      - 1
+    - - Bill-to Customer No.
+      - 1
+    - - 'Data retrieved:'
+      - 1
+    - - Customer Order Summary
+      - 1
+    min: null
+    max: null
+    mean: null
+    char_min: 4
+    char_max: 36
+- id: Data!A1:BC35
+  name: customer_order_summary_data
+  sheet: Data
+  a1_range: A1:BC35
+  kind: table
+  confidence: 0.6
+  header_rows: 1
+  orientation: rows
+  include: true
+  approved: true
+  dedupe_on: []
+  drop_duplicate_rows: false
+  agent_notes: Primary 55-column dataset (rows 2–35 = 34 data records). Cols C (CustFilter) and D (CustFilter1)
+    are empty in body rows. Cols R (AllAmountsAreInLCYTxt) is also sparse. Cols S–AB carry repeated caption/label
+    strings on every row (report metadata denormalized into data rows). Rows 36–41 are a separate per-customer
+    totals block staged independently.
+  cleanup_instructions: ''
+  detector_signals: []
+  profile:
+    row_count: 34
+    column_count: 55
+    empty_row_count: 0
+    duplicate_row_count: 3
+    candidate_key: []
+    header_rows: 1
+    has_totals_row: false
+  columns:
+  - source_name: companyname
+    name: companyname
+    ordinal: 0
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '@'
+    sample_values:
+    - CRONUS USA, Inc.
+    top_values:
+    - - CRONUS USA, Inc.
+      - 34
+    min: null
+    max: null
+    mean: null
+    char_min: 16
+    char_max: 16
+  - source_name: printamountsinlcy
+    name: printamountsinlcy
+    ordinal: 1
+    dtype: bool
+    semantic: boolean
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '0'
+    sample_values:
+    - false
+    top_values:
+    - - false
+      - 34
+    min: null
+    max: null
+    mean: null
+    char_min: null
+    char_max: null
+  - source_name: custfilter
+    name: custfilter
+    ordinal: 2
+    dtype: string
+    semantic: category
+    include: true
+    nullable: true
+    null_count: 34
+    populated_pct: 0.0
+    distinct_count: 0
+    is_unique: false
+    detected_format: null
+    sample_values: []
+    top_values: []
+    min: null
+    max: null
+    mean: null
+    char_min: null
+    char_max: null
+  - source_name: custfilter1
+    name: custfilter1
+    ordinal: 3
+    dtype: string
+    semantic: category
+    include: true
+    nullable: true
+    null_count: 34
+    populated_pct: 0.0
+    distinct_count: 0
+    is_unique: false
+    detected_format: null
+    sample_values: []
+    top_values: []
+    min: null
+    max: null
+    mean: null
+    char_min: null
+    char_max: null
+  - source_name: periodstartdate1
+    name: periodstartdate1
+    ordinal: 4
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '@'
+    sample_values:
+    - 07/01/27
+    top_values:
+    - - 07/01/27
+      - 34
+    min: null
+    max: null
+    mean: null
+    char_min: 8
+    char_max: 8
+  - source_name: periodstartdate2
+    name: periodstartdate2
+    ordinal: 5
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '@'
+    sample_values:
+    - 08/01/27
+    top_values:
+    - - 08/01/27
+      - 34
+    min: null
+    max: null
+    mean: null
+    char_min: 8
+    char_max: 8
+  - source_name: periodstartdate3
+    name: periodstartdate3
+    ordinal: 6
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '@'
+    sample_values:
+    - 09/01/27
+    top_values:
+    - - 09/01/27
+      - 34
+    min: null
+    max: null
+    mean: null
+    char_min: 8
+    char_max: 8
+  - source_name: periodstartdate21
+    name: periodstartdate21
+    ordinal: 7
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '@'
+    sample_values:
+    - 07/31/27
+    top_values:
+    - - 07/31/27
+      - 34
+    min: null
+    max: null
+    mean: null
+    char_min: 8
+    char_max: 8
+  - source_name: periodstartdate31
+    name: periodstartdate31
+    ordinal: 8
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '@'
+    sample_values:
+    - 08/31/27
+    top_values:
+    - - 08/31/27
+      - 34
+    min: null
+    max: null
+    mean: null
+    char_min: 8
+    char_max: 8
+  - source_name: periodstartdate41
+    name: periodstartdate41
+    ordinal: 9
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '@'
+    sample_values:
+    - 09/30/27
+    top_values:
+    - - 09/30/27
+      - 34
+    min: null
+    max: null
+    mean: null
+    char_min: 8
+    char_max: 8
+  - source_name: salesamtonorderlcy1
+    name: salesamtonorderlcy1
+    ordinal: 10
+    dtype: float
+    semantic: currency
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 27
+    is_unique: false
+    detected_format: '#,##0.00'
+    sample_values:
+    - 16767.6
+    - 1901
+    - 384.3
+    - 150
+    - 300
+    top_values:
+    - - 16767.6
+      - 2
+    - - 300
+      - 2
+    - - 30
+      - 2
+    - - 3856
+      - 2
+    - - 3802
+      - 2
+    min: 30
+    max: 16767.6
+    mean: 3916.4029
+    char_min: null
+    char_max: null
+  - source_name: salesamtonorderlcy2
+    name: salesamtonorderlcy2
+    ordinal: 11
+    dtype: int
+    semantic: currency
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '#,##0.00'
+    sample_values:
+    - 0
+    top_values:
+    - - 0
+      - 34
+    min: 0
+    max: 0
+    mean: 0.0
+    char_min: null
+    char_max: null
+  - source_name: salesamtonorderlcy3
+    name: salesamtonorderlcy3
+    ordinal: 12
+    dtype: int
+    semantic: currency
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '#,##0.00'
+    sample_values:
+    - 0
+    top_values:
+    - - 0
+      - 34
+    min: 0
+    max: 0
+    mean: 0.0
+    char_min: null
+    char_max: null
+  - source_name: salesamtonorderlcy4
+    name: salesamtonorderlcy4
+    ordinal: 13
+    dtype: int
+    semantic: currency
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '#,##0.00'
+    sample_values:
+    - 0
+    top_values:
+    - - 0
+      - 34
+    min: 0
+    max: 0
+    mean: 0.0
+    char_min: null
+    char_max: null
+  - source_name: salesamtonorderlcy5
+    name: salesamtonorderlcy5
+    ordinal: 14
+    dtype: int
+    semantic: currency
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '#,##0.00'
+    sample_values:
+    - 0
+    top_values:
+    - - 0
+      - 34
+    min: 0
+    max: 0
+    mean: 0.0
+    char_min: null
+    char_max: null
+  - source_name: salesorderamountlcy
+    name: salesorderamountlcy
+    ordinal: 15
+    dtype: float
+    semantic: currency
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 27
+    is_unique: false
+    detected_format: '#,##0.00'
+    sample_values:
+    - 16767.6
+    - 1901
+    - 384.3
+    - 150
+    - 300
+    top_values:
+    - - 16767.6
+      - 2
+    - - 300
+      - 2
+    - - 30
+      - 2
+    - - 3856
+      - 2
+    - - 3802
+      - 2
+    min: 30
+    max: 16767.6
+    mean: 3916.4029
+    char_min: null
+    char_max: null
+  - source_name: no_cust
+    name: no_cust
+    ordinal: 16
+    dtype: int
+    semantic: number
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 5
+    is_unique: false
+    detected_format: '@'
+    sample_values:
+    - '10000'
+    - '20000'
+    - '30000'
+    - '40000'
+    - '50000'
+    top_values:
+    - - '10000'
+      - 16
+    - - '30000'
+      - 6
+    - - '50000'
+      - 6
+    - - '40000'
+      - 5
+    - - '20000'
+      - 1
+    min: 10000
+    max: 50000
+    mean: 25294.1176
+    char_min: null
+    char_max: null
+  - source_name: allamountsareinlcytxt
+    name: allamountsareinlcytxt
+    ordinal: 17
+    dtype: string
+    semantic: category
+    include: true
+    nullable: true
+    null_count: 34
+    populated_pct: 0.0
+    distinct_count: 0
+    is_unique: false
+    detected_format: null
+    sample_values: []
+    top_values: []
+    min: null
+    max: null
+    mean: null
+    char_min: null
+    char_max: null
+  - source_name: totalcaption
+    name: totalcaption
+    ordinal: 18
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '@'
+    sample_values:
+    - Total
+    top_values:
+    - - Total
+      - 34
+    min: null
+    max: null
+    mean: null
+    char_min: 5
+    char_max: 5
+  - source_name: customerordersummarycaption
+    name: customerordersummarycaption
+    ordinal: 19
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '@'
+    sample_values:
+    - Customer - Order Summary
+    top_values:
+    - - Customer - Order Summary
+      - 34
+    min: null
+    max: null
+    mean: null
+    char_min: 24
+    char_max: 24
+  - source_name: pagenocaption
+    name: pagenocaption
+    ordinal: 20
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '@'
+    sample_values:
+    - Page
+    top_values:
+    - - Page
+      - 34
+    min: null
+    max: null
+    mean: null
+    char_min: 4
+    char_max: 4
+  - source_name: allamountsareinlcycaption
+    name: allamountsareinlcycaption
+    ordinal: 21
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '@'
+    sample_values:
+    - All amounts are in $
+    top_values:
+    - - All amounts are in $
+      - 34
+    min: null
+    max: null
+    mean: null
+    char_min: 20
+    char_max: 20
+  - source_name: outstandingorderscaption
+    name: outstandingorderscaption
+    ordinal: 22
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '@'
+    sample_values:
+    - Outstanding Orders
+    top_values:
+    - - Outstanding Orders
+      - 34
+    min: null
+    max: null
+    mean: null
+    char_min: 18
+    char_max: 18
+  - source_name: customernocaption
+    name: customernocaption
+    ordinal: 23
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '@'
+    sample_values:
+    - Customer No.
+    top_values:
+    - - Customer No.
+      - 34
+    min: null
+    max: null
+    mean: null
+    char_min: 12
+    char_max: 12
+  - source_name: customernamecaption
+    name: customernamecaption
+    ordinal: 24
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '@'
+    sample_values:
+    - Name
+    top_values:
+    - - Name
+      - 34
+    min: null
+    max: null
+    mean: null
+    char_min: 4
+    char_max: 4
+  - source_name: beforecaption
+    name: beforecaption
+    ordinal: 25
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '@'
+    sample_values:
+    - '...before'
+    top_values:
+    - - '...before'
+      - 34
+    min: null
+    max: null
+    mean: null
+    char_min: 9
+    char_max: 9
+  - source_name: aftercaption
+    name: aftercaption
+    ordinal: 26
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '@'
+    sample_values:
+    - after...
+    top_values:
+    - - after...
+      - 34
+    min: null
+    max: null
+    mean: null
+    char_min: 8
+    char_max: 8
+  - source_name: totallcycaption
+    name: totallcycaption
+    ordinal: 27
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '@'
+    sample_values:
+    - Total ($)
+    top_values:
+    - - Total ($)
+      - 34
+    min: null
+    max: null
+    mean: null
+    char_min: 9
+    char_max: 9
+  - source_name: salesorderamount
+    name: salesorderamount
+    ordinal: 28
+    dtype: float
+    semantic: currency
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 27
+    is_unique: false
+    detected_format: '#,##0.00'
+    sample_values:
+    - 16767.6
+    - 1901
+    - 384.3
+    - 150
+    - 300
+    top_values:
+    - - 16767.6
+      - 2
+    - - 300
+      - 2
+    - - 30
+      - 2
+    - - 3856
+      - 2
+    - - 3802
+      - 2
+    min: 30
+    max: 16767.6
+    mean: 3916.4029
+    char_min: null
+    char_max: null
+  - source_name: salesamtonorder5
+    name: salesamtonorder5
+    ordinal: 29
+    dtype: int
+    semantic: currency
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '#,##0.00'
+    sample_values:
+    - 0
+    top_values:
+    - - 0
+      - 34
+    min: 0
+    max: 0
+    mean: 0.0
+    char_min: null
+    char_max: null
+  - source_name: salesamtonorder4
+    name: salesamtonorder4
+    ordinal: 30
+    dtype: int
+    semantic: currency
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '#,##0.00'
+    sample_values:
+    - 0
+    top_values:
+    - - 0
+      - 34
+    min: 0
+    max: 0
+    mean: 0.0
+    char_min: null
+    char_max: null
+  - source_name: salesamtonorder3
+    name: salesamtonorder3
+    ordinal: 31
+    dtype: int
+    semantic: currency
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '#,##0.00'
+    sample_values:
+    - 0
+    top_values:
+    - - 0
+      - 34
+    min: 0
+    max: 0
+    mean: 0.0
+    char_min: null
+    char_max: null
+  - source_name: salesamtonorder2
+    name: salesamtonorder2
+    ordinal: 32
+    dtype: int
+    semantic: currency
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '#,##0.00'
+    sample_values:
+    - 0
+    top_values:
+    - - 0
+      - 34
+    min: 0
+    max: 0
+    mean: 0.0
+    char_min: null
+    char_max: null
+  - source_name: salesamtonorder1
+    name: salesamtonorder1
+    ordinal: 33
+    dtype: float
+    semantic: currency
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 27
+    is_unique: false
+    detected_format: '#,##0.00'
+    sample_values:
+    - 16767.6
+    - 1901
+    - 384.3
+    - 150
+    - 300
+    top_values:
+    - - 16767.6
+      - 2
+    - - 300
+      - 2
+    - - 30
+      - 2
+    - - 3856
+      - 2
+    - - 3802
+      - 2
+    min: 30
+    max: 16767.6
+    mean: 3916.4029
+    char_min: null
+    char_max: null
+  - source_name: currencycode_salesline
+    name: currencycode_salesline
+    ordinal: 34
+    dtype: string
+    semantic: category
+    include: true
+    nullable: true
+    null_count: 34
+    populated_pct: 0.0
+    distinct_count: 0
+    is_unique: false
+    detected_format: null
+    sample_values: []
+    top_values: []
+    min: null
+    max: null
+    mean: null
+    char_min: null
+    char_max: null
+  - source_name: name_cust
+    name: name_cust
+    ordinal: 35
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 5
+    is_unique: false
+    detected_format: '@'
+    sample_values:
+    - Adatum Corporation
+    - Trey Research
+    - School of Fine Art
+    - Alpine Ski House
+    - Relecloud
+    top_values:
+    - - Adatum Corporation
+      - 16
+    - - School of Fine Art
+      - 6
+    - - Relecloud
+      - 6
+    - - Alpine Ski House
+      - 5
+    - - Trey Research
+      - 1
+    min: null
+    max: null
+    mean: null
+    char_min: 9
+    char_max: 18
+  - source_name: saleslinebilltono_customer
+    name: saleslinebilltono_customer
+    ordinal: 36
+    dtype: int
+    semantic: currency
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 5
+    is_unique: false
+    detected_format: '@'
+    sample_values:
+    - '10000'
+    - '20000'
+    - '30000'
+    - '40000'
+    - '50000'
+    top_values:
+    - - '10000'
+      - 16
+    - - '30000'
+      - 6
+    - - '50000'
+      - 6
+    - - '40000'
+      - 5
+    - - '20000'
+      - 1
+    min: 10000
+    max: 50000
+    mean: 25294.1176
+    char_min: null
+    char_max: null
+  - source_name: groupnumber
+    name: groupnumber
+    ordinal: 37
+    dtype: int
+    semantic: number
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 5
+    is_unique: false
+    detected_format: '0'
+    sample_values:
+    - 1
+    - 2
+    - 3
+    - 4
+    - 5
+    top_values:
+    - - 1
+      - 16
+    - - 3
+      - 6
+    - - 5
+      - 6
+    - - 4
+      - 5
+    - - 2
+      - 1
+    min: 1
+    max: 5
+    mean: 2.5294
+    char_min: null
+    char_max: null
+  - source_name: number
+    name: number
+    ordinal: 38
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '0'
+    sample_values:
+    - 'NULL'
+    top_values:
+    - - 'NULL'
+      - 34
+    min: null
+    max: null
+    mean: null
+    char_min: 4
+    char_max: 4
+  - source_name: saleslinebuffer_billtocustomerno
+    name: saleslinebuffer_billtocustomerno
+    ordinal: 39
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '@'
+    sample_values:
+    - 'NULL'
+    top_values:
+    - - 'NULL'
+      - 34
+    min: null
+    max: null
+    mean: null
+    char_min: 4
+    char_max: 4
+  - source_name: saleslinebuffer_customername
+    name: saleslinebuffer_customername
+    ordinal: 40
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '@'
+    sample_values:
+    - 'NULL'
+    top_values:
+    - - 'NULL'
+      - 34
+    min: null
+    max: null
+    mean: null
+    char_min: 4
+    char_max: 4
+  - source_name: saleslinebuffer_currencycode
+    name: saleslinebuffer_currencycode
+    ordinal: 41
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '@'
+    sample_values:
+    - 'NULL'
+    top_values:
+    - - 'NULL'
+      - 34
+    min: null
+    max: null
+    mean: null
+    char_min: 4
+    char_max: 4
+  - source_name: saleslinebuffer_salesorderamount
+    name: saleslinebuffer_salesorderamount
+    ordinal: 42
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '#,##0.00'
+    sample_values:
+    - 'NULL'
+    top_values:
+    - - 'NULL'
+      - 34
+    min: null
+    max: null
+    mean: null
+    char_min: 4
+    char_max: 4
+  - source_name: saleslinebuffer_salesamtonorder1
+    name: saleslinebuffer_salesamtonorder1
+    ordinal: 43
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '#,##0.00'
+    sample_values:
+    - 'NULL'
+    top_values:
+    - - 'NULL'
+      - 34
+    min: null
+    max: null
+    mean: null
+    char_min: 4
+    char_max: 4
+  - source_name: saleslinebuffer_salesamtonorder2
+    name: saleslinebuffer_salesamtonorder2
+    ordinal: 44
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '#,##0.00'
+    sample_values:
+    - 'NULL'
+    top_values:
+    - - 'NULL'
+      - 34
+    min: null
+    max: null
+    mean: null
+    char_min: 4
+    char_max: 4
+  - source_name: saleslinebuffer_salesamtonorder3
+    name: saleslinebuffer_salesamtonorder3
+    ordinal: 45
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '#,##0.00'
+    sample_values:
+    - 'NULL'
+    top_values:
+    - - 'NULL'
+      - 34
+    min: null
+    max: null
+    mean: null
+    char_min: 4
+    char_max: 4
+  - source_name: saleslinebuffer_salesamtonorder4
+    name: saleslinebuffer_salesamtonorder4
+    ordinal: 46
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '#,##0.00'
+    sample_values:
+    - 'NULL'
+    top_values:
+    - - 'NULL'
+      - 34
+    min: null
+    max: null
+    mean: null
+    char_min: 4
+    char_max: 4
+  - source_name: saleslinebuffer_salesamtonorder5
+    name: saleslinebuffer_salesamtonorder5
+    ordinal: 47
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '#,##0.00'
+    sample_values:
+    - 'NULL'
+    top_values:
+    - - 'NULL'
+      - 34
+    min: null
+    max: null
+    mean: null
+    char_min: 4
+    char_max: 4
+  - source_name: totals_sales_order_amount
+    name: totals_sales_order_amount
+    ordinal: 48
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '#,##0.00'
+    sample_values:
+    - 'NULL'
+    top_values:
+    - - 'NULL'
+      - 34
+    min: null
+    max: null
+    mean: null
+    char_min: 4
+    char_max: 4
+  - source_name: totals_sales_amt_on_order1
+    name: totals_sales_amt_on_order1
+    ordinal: 49
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '#,##0.00'
+    sample_values:
+    - 'NULL'
+    top_values:
+    - - 'NULL'
+      - 34
+    min: null
+    max: null
+    mean: null
+    char_min: 4
+    char_max: 4
+  - source_name: totals_sales_amt_on_order2
+    name: totals_sales_amt_on_order2
+    ordinal: 50
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '#,##0.00'
+    sample_values:
+    - 'NULL'
+    top_values:
+    - - 'NULL'
+      - 34
+    min: null
+    max: null
+    mean: null
+    char_min: 4
+    char_max: 4
+  - source_name: totals_sales_amt_on_order3
+    name: totals_sales_amt_on_order3
+    ordinal: 51
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '#,##0.00'
+    sample_values:
+    - 'NULL'
+    top_values:
+    - - 'NULL'
+      - 34
+    min: null
+    max: null
+    mean: null
+    char_min: 4
+    char_max: 4
+  - source_name: totals_sales_amt_on_order4
+    name: totals_sales_amt_on_order4
+    ordinal: 52
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '#,##0.00'
+    sample_values:
+    - 'NULL'
+    top_values:
+    - - 'NULL'
+      - 34
+    min: null
+    max: null
+    mean: null
+    char_min: 4
+    char_max: 4
+  - source_name: totals_sales_amt_on_order5
+    name: totals_sales_amt_on_order5
+    ordinal: 53
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '#,##0.00'
+    sample_values:
+    - 'NULL'
+    top_values:
+    - - 'NULL'
+      - 34
+    min: null
+    max: null
+    mean: null
+    char_min: 4
+    char_max: 4
+  - source_name: totals_totaltext
+    name: totals_totaltext
+    ordinal: 54
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '@'
+    sample_values:
+    - 'NULL'
+    top_values:
+    - - 'NULL'
+      - 34
+    min: null
+    max: null
+    mean: null
+    char_min: 4
+    char_max: 4
+- id: Data!A36:BC41
+  name: customer_order_totals_by_customer
+  sheet: Data
+  a1_range: A36:BC41
+  kind: table
+  confidence: 0.6
+  header_rows: 1
+  orientation: rows
+  include: true
+  approved: true
+  dedupe_on: []
+  drop_duplicate_rows: false
+  agent_notes: 5 per-customer summary rows (rows 36–40) plus a Grand Total row (row 41, BC41="Total").
+    No header row — column meanings inherited from row 1 of the main data block above. Most columns (A–AL,
+    AW–BC in rows 36–40) contain NULL strings; active columns are AM (Number 1–5), AN (BilltoCustomerNo),
+    AO (CustomerName), AQ (SalesOrderAmount), AR–AV (SalesAmtOnOrder 1–5); row 41 carries grand totals
+    in AW–BB.
+  cleanup_instructions: ''
+  detector_signals: []
+  profile:
+    row_count: 5
+    column_count: 55
+    empty_row_count: 0
+    duplicate_row_count: 0
+    candidate_key:
+    - '1'
+    header_rows: 1
+    has_totals_row: false
+  columns:
+  - source_name: 'null'
+    name: 'null'
+    ordinal: 0
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '@'
+    sample_values:
+    - 'NULL'
+    top_values:
+    - - 'NULL'
+      - 5
+    min: null
+    max: null
+    mean: null
+    char_min: 4
+    char_max: 4
+  - source_name: null_2
+    name: null_2
+    ordinal: 1
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '0'
+    sample_values:
+    - 'NULL'
+    top_values:
+    - - 'NULL'
+      - 5
+    min: null
+    max: null
+    mean: null
+    char_min: 4
+    char_max: 4
+  - source_name: null_3
+    name: null_3
+    ordinal: 2
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '@'
+    sample_values:
+    - 'NULL'
+    top_values:
+    - - 'NULL'
+      - 5
+    min: null
+    max: null
+    mean: null
+    char_min: 4
+    char_max: 4
+  - source_name: null_4
+    name: null_4
+    ordinal: 3
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '@'
+    sample_values:
+    - 'NULL'
+    top_values:
+    - - 'NULL'
+      - 5
+    min: null
+    max: null
+    mean: null
+    char_min: 4
+    char_max: 4
+  - source_name: null_5
+    name: null_5
+    ordinal: 4
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '@'
+    sample_values:
+    - 'NULL'
+    top_values:
+    - - 'NULL'
+      - 5
+    min: null
+    max: null
+    mean: null
+    char_min: 4
+    char_max: 4
+  - source_name: null_6
+    name: null_6
+    ordinal: 5
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '@'
+    sample_values:
+    - 'NULL'
+    top_values:
+    - - 'NULL'
+      - 5
+    min: null
+    max: null
+    mean: null
+    char_min: 4
+    char_max: 4
+  - source_name: null_7
+    name: null_7
+    ordinal: 6
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '@'
+    sample_values:
+    - 'NULL'
+    top_values:
+    - - 'NULL'
+      - 5
+    min: null
+    max: null
+    mean: null
+    char_min: 4
+    char_max: 4
+  - source_name: null_8
+    name: null_8
+    ordinal: 7
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '@'
+    sample_values:
+    - 'NULL'
+    top_values:
+    - - 'NULL'
+      - 5
+    min: null
+    max: null
+    mean: null
+    char_min: 4
+    char_max: 4
+  - source_name: null_9
+    name: null_9
+    ordinal: 8
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '@'
+    sample_values:
+    - 'NULL'
+    top_values:
+    - - 'NULL'
+      - 5
+    min: null
+    max: null
+    mean: null
+    char_min: 4
+    char_max: 4
+  - source_name: null_10
+    name: null_10
+    ordinal: 9
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '@'
+    sample_values:
+    - 'NULL'
+    top_values:
+    - - 'NULL'
+      - 5
+    min: null
+    max: null
+    mean: null
+    char_min: 4
+    char_max: 4
+  - source_name: null_11
+    name: null_11
+    ordinal: 10
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '#,##0.00'
+    sample_values:
+    - 'NULL'
+    top_values:
+    - - 'NULL'
+      - 5
+    min: null
+    max: null
+    mean: null
+    char_min: 4
+    char_max: 4
+  - source_name: null_12
+    name: null_12
+    ordinal: 11
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '#,##0.00'
+    sample_values:
+    - 'NULL'
+    top_values:
+    - - 'NULL'
+      - 5
+    min: null
+    max: null
+    mean: null
+    char_min: 4
+    char_max: 4
+  - source_name: null_13
+    name: null_13
+    ordinal: 12
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '#,##0.00'
+    sample_values:
+    - 'NULL'
+    top_values:
+    - - 'NULL'
+      - 5
+    min: null
+    max: null
+    mean: null
+    char_min: 4
+    char_max: 4
+  - source_name: null_14
+    name: null_14
+    ordinal: 13
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '#,##0.00'
+    sample_values:
+    - 'NULL'
+    top_values:
+    - - 'NULL'
+      - 5
+    min: null
+    max: null
+    mean: null
+    char_min: 4
+    char_max: 4
+  - source_name: null_15
+    name: null_15
+    ordinal: 14
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '#,##0.00'
+    sample_values:
+    - 'NULL'
+    top_values:
+    - - 'NULL'
+      - 5
+    min: null
+    max: null
+    mean: null
+    char_min: 4
+    char_max: 4
+  - source_name: null_16
+    name: null_16
+    ordinal: 15
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '#,##0.00'
+    sample_values:
+    - 'NULL'
+    top_values:
+    - - 'NULL'
+      - 5
+    min: null
+    max: null
+    mean: null
+    char_min: 4
+    char_max: 4
+  - source_name: null_17
+    name: null_17
+    ordinal: 16
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '@'
+    sample_values:
+    - 'NULL'
+    top_values:
+    - - 'NULL'
+      - 5
+    min: null
+    max: null
+    mean: null
+    char_min: 4
+    char_max: 4
+  - source_name: null_18
+    name: null_18
+    ordinal: 17
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '@'
+    sample_values:
+    - 'NULL'
+    top_values:
+    - - 'NULL'
+      - 5
+    min: null
+    max: null
+    mean: null
+    char_min: 4
+    char_max: 4
+  - source_name: null_19
+    name: null_19
+    ordinal: 18
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '@'
+    sample_values:
+    - 'NULL'
+    top_values:
+    - - 'NULL'
+      - 5
+    min: null
+    max: null
+    mean: null
+    char_min: 4
+    char_max: 4
+  - source_name: null_20
+    name: null_20
+    ordinal: 19
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '@'
+    sample_values:
+    - 'NULL'
+    top_values:
+    - - 'NULL'
+      - 5
+    min: null
+    max: null
+    mean: null
+    char_min: 4
+    char_max: 4
+  - source_name: null_21
+    name: null_21
+    ordinal: 20
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '@'
+    sample_values:
+    - 'NULL'
+    top_values:
+    - - 'NULL'
+      - 5
+    min: null
+    max: null
+    mean: null
+    char_min: 4
+    char_max: 4
+  - source_name: null_22
+    name: null_22
+    ordinal: 21
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '@'
+    sample_values:
+    - 'NULL'
+    top_values:
+    - - 'NULL'
+      - 5
+    min: null
+    max: null
+    mean: null
+    char_min: 4
+    char_max: 4
+  - source_name: null_23
+    name: null_23
+    ordinal: 22
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '@'
+    sample_values:
+    - 'NULL'
+    top_values:
+    - - 'NULL'
+      - 5
+    min: null
+    max: null
+    mean: null
+    char_min: 4
+    char_max: 4
+  - source_name: null_24
+    name: null_24
+    ordinal: 23
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '@'
+    sample_values:
+    - 'NULL'
+    top_values:
+    - - 'NULL'
+      - 5
+    min: null
+    max: null
+    mean: null
+    char_min: 4
+    char_max: 4
+  - source_name: null_25
+    name: null_25
+    ordinal: 24
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '@'
+    sample_values:
+    - 'NULL'
+    top_values:
+    - - 'NULL'
+      - 5
+    min: null
+    max: null
+    mean: null
+    char_min: 4
+    char_max: 4
+  - source_name: null_26
+    name: null_26
+    ordinal: 25
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '@'
+    sample_values:
+    - 'NULL'
+    top_values:
+    - - 'NULL'
+      - 5
+    min: null
+    max: null
+    mean: null
+    char_min: 4
+    char_max: 4
+  - source_name: null_27
+    name: null_27
+    ordinal: 26
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '@'
+    sample_values:
+    - 'NULL'
+    top_values:
+    - - 'NULL'
+      - 5
+    min: null
+    max: null
+    mean: null
+    char_min: 4
+    char_max: 4
+  - source_name: null_28
+    name: null_28
+    ordinal: 27
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '@'
+    sample_values:
+    - 'NULL'
+    top_values:
+    - - 'NULL'
+      - 5
+    min: null
+    max: null
+    mean: null
+    char_min: 4
+    char_max: 4
+  - source_name: null_29
+    name: null_29
+    ordinal: 28
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '#,##0.00'
+    sample_values:
+    - 'NULL'
+    top_values:
+    - - 'NULL'
+      - 5
+    min: null
+    max: null
+    mean: null
+    char_min: 4
+    char_max: 4
+  - source_name: null_30
+    name: null_30
+    ordinal: 29
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '#,##0.00'
+    sample_values:
+    - 'NULL'
+    top_values:
+    - - 'NULL'
+      - 5
+    min: null
+    max: null
+    mean: null
+    char_min: 4
+    char_max: 4
+  - source_name: null_31
+    name: null_31
+    ordinal: 30
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '#,##0.00'
+    sample_values:
+    - 'NULL'
+    top_values:
+    - - 'NULL'
+      - 5
+    min: null
+    max: null
+    mean: null
+    char_min: 4
+    char_max: 4
+  - source_name: null_32
+    name: null_32
+    ordinal: 31
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '#,##0.00'
+    sample_values:
+    - 'NULL'
+    top_values:
+    - - 'NULL'
+      - 5
+    min: null
+    max: null
+    mean: null
+    char_min: 4
+    char_max: 4
+  - source_name: null_33
+    name: null_33
+    ordinal: 32
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '#,##0.00'
+    sample_values:
+    - 'NULL'
+    top_values:
+    - - 'NULL'
+      - 5
+    min: null
+    max: null
+    mean: null
+    char_min: 4
+    char_max: 4
+  - source_name: null_34
+    name: null_34
+    ordinal: 33
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '#,##0.00'
+    sample_values:
+    - 'NULL'
+    top_values:
+    - - 'NULL'
+      - 5
+    min: null
+    max: null
+    mean: null
+    char_min: 4
+    char_max: 4
+  - source_name: null_35
+    name: null_35
+    ordinal: 34
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '@'
+    sample_values:
+    - 'NULL'
+    top_values:
+    - - 'NULL'
+      - 5
+    min: null
+    max: null
+    mean: null
+    char_min: 4
+    char_max: 4
+  - source_name: null_36
+    name: null_36
+    ordinal: 35
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '@'
+    sample_values:
+    - 'NULL'
+    top_values:
+    - - 'NULL'
+      - 5
+    min: null
+    max: null
+    mean: null
+    char_min: 4
+    char_max: 4
+  - source_name: null_37
+    name: null_37
+    ordinal: 36
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '@'
+    sample_values:
+    - 'NULL'
+    top_values:
+    - - 'NULL'
+      - 5
+    min: null
+    max: null
+    mean: null
+    char_min: 4
+    char_max: 4
+  - source_name: null_38
+    name: null_38
+    ordinal: 37
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '0'
+    sample_values:
+    - 'NULL'
+    top_values:
+    - - 'NULL'
+      - 5
+    min: null
+    max: null
+    mean: null
+    char_min: 4
+    char_max: 4
+  - source_name: '1'
+    name: '1'
+    ordinal: 38
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 5
+    is_unique: true
+    detected_format: '0'
+    sample_values:
+    - 2
+    - 3
+    - 4
+    - 5
+    - 'NULL'
+    top_values:
+    - - 2
+      - 1
+    - - 3
+      - 1
+    - - 4
+      - 1
+    - - 5
+      - 1
+    - - 'NULL'
+      - 1
+    min: null
+    max: null
+    mean: null
+    char_min: 1
+    char_max: 4
+  - source_name: '10000'
+    name: '10000'
+    ordinal: 39
+    dtype: string
+    semantic: free_text
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 5
+    is_unique: true
+    detected_format: '@'
+    sample_values:
+    - '20000'
+    - '30000'
+    - '40000'
+    - '50000'
+    - 'NULL'
+    top_values:
+    - - '20000'
+      - 1
+    - - '30000'
+      - 1
+    - - '40000'
+      - 1
+    - - '50000'
+      - 1
+    - - 'NULL'
+      - 1
+    min: null
+    max: null
+    mean: null
+    char_min: 4
+    char_max: 5
+  - source_name: adatum_corporation
+    name: adatum_corporation
+    ordinal: 40
+    dtype: string
+    semantic: percent
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 5
+    is_unique: true
+    detected_format: '@'
+    sample_values:
+    - Trey Research
+    - School of Fine Art
+    - Alpine Ski House
+    - Relecloud
+    - 'NULL'
+    top_values:
+    - - Trey Research
+      - 1
+    - - School of Fine Art
+      - 1
+    - - Alpine Ski House
+      - 1
+    - - Relecloud
+      - 1
+    - - 'NULL'
+      - 1
+    min: null
+    max: null
+    mean: null
+    char_min: 4
+    char_max: 18
+  - source_name: column_42
+    name: column_42
+    ordinal: 41
+    dtype: string
+    semantic: category
+    include: true
+    nullable: true
+    null_count: 4
+    populated_pct: 20.0
+    distinct_count: 1
+    is_unique: false
+    detected_format: '@'
+    sample_values:
+    - 'NULL'
+    top_values:
+    - - 'NULL'
+      - 1
+    min: null
+    max: null
+    mean: null
+    char_min: 4
+    char_max: 4
+  - source_name: '43334_7'
+    name: '43334_7'
+    ordinal: 42
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 5
+    is_unique: true
+    detected_format: '#,##0.00'
+    sample_values:
+    - 13973
+    - 35088.6
+    - 8365.2
+    - 32396.2
+    - 'NULL'
+    top_values:
+    - - 13973
+      - 1
+    - - 35088.6
+      - 1
+    - - 8365.2
+      - 1
+    - - 32396.2
+      - 1
+    - - 'NULL'
+      - 1
+    min: null
+    max: null
+    mean: null
+    char_min: 4
+    char_max: 7
+  - source_name: '43334_7_2'
+    name: '43334_7_2'
+    ordinal: 43
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 5
+    is_unique: true
+    detected_format: '#,##0.00'
+    sample_values:
+    - 13973
+    - 35088.6
+    - 8365.2
+    - 32396.2
+    - 'NULL'
+    top_values:
+    - - 13973
+      - 1
+    - - 35088.6
+      - 1
+    - - 8365.2
+      - 1
+    - - 32396.2
+      - 1
+    - - 'NULL'
+      - 1
+    min: null
+    max: null
+    mean: null
+    char_min: 4
+    char_max: 7
+  - source_name: '0'
+    name: '0'
+    ordinal: 44
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 2
+    is_unique: false
+    detected_format: '#,##0.00'
+    sample_values:
+    - 0
+    - 'NULL'
+    top_values:
+    - - 0
+      - 4
+    - - 'NULL'
+      - 1
+    min: null
+    max: null
+    mean: null
+    char_min: 1
+    char_max: 4
+  - source_name: '0_2'
+    name: '0_2'
+    ordinal: 45
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 2
+    is_unique: false
+    detected_format: '#,##0.00'
+    sample_values:
+    - 0
+    - 'NULL'
+    top_values:
+    - - 0
+      - 4
+    - - 'NULL'
+      - 1
+    min: null
+    max: null
+    mean: null
+    char_min: 1
+    char_max: 4
+  - source_name: '0_3'
+    name: '0_3'
+    ordinal: 46
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 2
+    is_unique: false
+    detected_format: '#,##0.00'
+    sample_values:
+    - 0
+    - 'NULL'
+    top_values:
+    - - 0
+      - 4
+    - - 'NULL'
+      - 1
+    min: null
+    max: null
+    mean: null
+    char_min: 1
+    char_max: 4
+  - source_name: '0_4'
+    name: '0_4'
+    ordinal: 47
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 2
+    is_unique: false
+    detected_format: '#,##0.00'
+    sample_values:
+    - 0
+    - 'NULL'
+    top_values:
+    - - 0
+      - 4
+    - - 'NULL'
+      - 1
+    min: null
+    max: null
+    mean: null
+    char_min: 1
+    char_max: 4
+  - source_name: null_39
+    name: null_39
+    ordinal: 48
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 2
+    is_unique: false
+    detected_format: '#,##0.00'
+    sample_values:
+    - 'NULL'
+    - 133157.7
+    top_values:
+    - - 'NULL'
+      - 4
+    - - 133157.7
+      - 1
+    min: null
+    max: null
+    mean: null
+    char_min: 4
+    char_max: 8
+  - source_name: null_40
+    name: null_40
+    ordinal: 49
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 2
+    is_unique: false
+    detected_format: '#,##0.00'
+    sample_values:
+    - 'NULL'
+    - 133157.7
+    top_values:
+    - - 'NULL'
+      - 4
+    - - 133157.7
+      - 1
+    min: null
+    max: null
+    mean: null
+    char_min: 4
+    char_max: 8
+  - source_name: null_41
+    name: null_41
+    ordinal: 50
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 2
+    is_unique: false
+    detected_format: '#,##0.00'
+    sample_values:
+    - 'NULL'
+    - 0
+    top_values:
+    - - 'NULL'
+      - 4
+    - - 0
+      - 1
+    min: null
+    max: null
+    mean: null
+    char_min: 1
+    char_max: 4
+  - source_name: null_42
+    name: null_42
+    ordinal: 51
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 2
+    is_unique: false
+    detected_format: '#,##0.00'
+    sample_values:
+    - 'NULL'
+    - 0
+    top_values:
+    - - 'NULL'
+      - 4
+    - - 0
+      - 1
+    min: null
+    max: null
+    mean: null
+    char_min: 1
+    char_max: 4
+  - source_name: null_43
+    name: null_43
+    ordinal: 52
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 2
+    is_unique: false
+    detected_format: '#,##0.00'
+    sample_values:
+    - 'NULL'
+    - 0
+    top_values:
+    - - 'NULL'
+      - 4
+    - - 0
+      - 1
+    min: null
+    max: null
+    mean: null
+    char_min: 1
+    char_max: 4
+  - source_name: null_44
+    name: null_44
+    ordinal: 53
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 2
+    is_unique: false
+    detected_format: '#,##0.00'
+    sample_values:
+    - 'NULL'
+    - 0
+    top_values:
+    - - 'NULL'
+      - 4
+    - - 0
+      - 1
+    min: null
+    max: null
+    mean: null
+    char_min: 1
+    char_max: 4
+  - source_name: null_45
+    name: null_45
+    ordinal: 54
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 2
+    is_unique: false
+    detected_format: '@'
+    sample_values:
+    - 'NULL'
+    - Total
+    top_values:
+    - - 'NULL'
+      - 4
+    - - Total
+      - 1
+    min: null
+    max: null
+    mean: null
+    char_min: 4
+    char_max: 5
+- id: Pivot!A4:D22
+  name: pivot_sales_order_summary_all_customers
+  sheet: Pivot
+  a1_range: A4:D22
+  kind: table
+  confidence: 0.6
+  header_rows: 1
+  orientation: rows
+  include: true
+  approved: true
+  dedupe_on: []
+  drop_duplicate_rows: false
+  agent_notes: 'Pivot table: customer vs. three sales-amount measures. Row 22 is Grand Total (extractor
+    should flag). Odd-numbered body rows (e.g. A19="NULL") are grouping sub-rows; every customer appears
+    twice. Filter slicers in A1:B2 (discarded) act as the title banner.'
+  cleanup_instructions: ''
+  detector_signals: []
+  profile:
+    row_count: 17
+    column_count: 4
+    empty_row_count: 0
+    duplicate_row_count: 1
+    candidate_key: []
+    header_rows: 1
+    has_totals_row: true
+  columns:
+  - source_name: row_labels
+    name: row_labels
+    ordinal: 0
+    dtype: string
+    semantic: free_text
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 11
+    is_unique: false
+    detected_format: null
+    sample_values:
+    - Adatum Corporation
+    - 'NULL'
+    - Alpine Ski House
+    - 1
+    - 2
+    top_values:
+    - - 'NULL'
+      - 7
+    - - Adatum Corporation
+      - 1
+    - - Alpine Ski House
+      - 1
+    - - 1
+      - 1
+    - - 2
+      - 1
+    min: null
+    max: null
+    mean: null
+    char_min: 1
+    char_max: 18
+  - source_name: sum_of_salesamtonorderlcy1
+    name: sum_of_salesamtonorderlcy1
+    ordinal: 1
+    dtype: float
+    semantic: currency
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 6
+    is_unique: false
+    detected_format: null
+    sample_values:
+    - 43334.7
+    - 8365.2
+    - 0
+    - 32396.199999999997
+    - 35088.6
+    top_values:
+    - - 0
+      - 7
+    - - 43334.7
+      - 2
+    - - 8365.2
+      - 2
+    - - 32396.199999999997
+      - 2
+    - - 35088.6
+      - 2
+    min: 0
+    max: 43334.7
+    mean: 15665.6118
+    char_min: null
+    char_max: null
+  - source_name: sum_of_totals_sales_order_amount
+    name: sum_of_totals_sales_order_amount
+    ordinal: 2
+    dtype: float
+    semantic: currency
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 2
+    is_unique: false
+    detected_format: null
+    sample_values:
+    - 0
+    - 133157.7
+    top_values:
+    - - 0
+      - 15
+    - - 133157.7
+      - 2
+    min: 0
+    max: 133157.7
+    mean: 15665.6118
+    char_min: null
+    char_max: null
+  - source_name: sum_of_salesorderamount
+    name: sum_of_salesorderamount
+    ordinal: 3
+    dtype: float
+    semantic: currency
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 6
+    is_unique: false
+    detected_format: null
+    sample_values:
+    - 43334.7
+    - 8365.2
+    - 0
+    - 32396.199999999997
+    - 35088.6
+    top_values:
+    - - 0
+      - 7
+    - - 43334.7
+      - 2
+    - - 8365.2
+      - 2
+    - - 32396.199999999997
+      - 2
+    - - 35088.6
+      - 2
+    min: 0
+    max: 43334.7
+    mean: 15665.6118
+    char_min: null
+    char_max: null
+- id: Pivot!G4:J11
+  name: pivot_sales_order_summary_filtered
+  sheet: Pivot
+  a1_range: G4:J11
+  kind: table
+  confidence: 0.6
+  header_rows: 1
+  orientation: rows
+  include: true
+  approved: true
+  dedupe_on: []
+  drop_duplicate_rows: false
+  agent_notes: Second pivot table on same sheet, side-by-side with A4:D22. Covers 6 distinct customers,
+    one row each, plus Grand Total at row 11. Same three measures. Filter slicers in G1:H2 (discarded)
+    act as its banner.
+  cleanup_instructions: ''
+  detector_signals: []
+  profile:
+    row_count: 6
+    column_count: 4
+    empty_row_count: 0
+    duplicate_row_count: 0
+    candidate_key:
+    - row_labels
+    header_rows: 1
+    has_totals_row: true
+  columns:
+  - source_name: row_labels
+    name: row_labels
+    ordinal: 0
+    dtype: string
+    semantic: free_text
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 6
+    is_unique: true
+    detected_format: null
+    sample_values:
+    - Adatum Corporation
+    - Alpine Ski House
+    - 'NULL'
+    - Relecloud
+    - School of Fine Art
+    top_values:
+    - - Adatum Corporation
+      - 1
+    - - Alpine Ski House
+      - 1
+    - - 'NULL'
+      - 1
+    - - Relecloud
+      - 1
+    - - School of Fine Art
+      - 1
+    min: null
+    max: null
+    mean: null
+    char_min: 4
+    char_max: 18
+  - source_name: sum_of_salesamtonorderlcy1
+    name: sum_of_salesamtonorderlcy1
+    ordinal: 1
+    dtype: float
+    semantic: currency
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 6
+    is_unique: true
+    detected_format: null
+    sample_values:
+    - 43334.7
+    - 8365.2
+    - 0
+    - 32396.199999999997
+    - 35088.6
+    top_values:
+    - - 43334.7
+      - 1
+    - - 8365.2
+      - 1
+    - - 0
+      - 1
+    - - 32396.199999999997
+      - 1
+    - - 35088.6
+      - 1
+    min: 0
+    max: 43334.7
+    mean: 22192.95
+    char_min: null
+    char_max: null
+  - source_name: sum_of_totals_sales_order_amount
+    name: sum_of_totals_sales_order_amount
+    ordinal: 2
+    dtype: float
+    semantic: currency
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 2
+    is_unique: false
+    detected_format: null
+    sample_values:
+    - 0
+    - 133157.7
+    top_values:
+    - - 0
+      - 5
+    - - 133157.7
+      - 1
+    min: 0
+    max: 133157.7
+    mean: 22192.95
+    char_min: null
+    char_max: null
+  - source_name: sum_of_salesorderamount
+    name: sum_of_salesorderamount
+    ordinal: 3
+    dtype: float
+    semantic: currency
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 6
+    is_unique: true
+    detected_format: null
+    sample_values:
+    - 43334.7
+    - 8365.2
+    - 0
+    - 32396.199999999997
+    - 35088.6
+    top_values:
+    - - 43334.7
+      - 1
+    - - 8365.2
+      - 1
+    - - 0
+      - 1
+    - - 32396.199999999997
+      - 1
+    - - 35088.6
+      - 1
+    min: 0
+    max: 43334.7
+    mean: 22192.95
+    char_min: null
+    char_max: null
+- id: TranslationData!A1:C1
+  name: translation_data
+  sheet: TranslationData
+  a1_range: A1:C1
+  kind: table
+  confidence: 0.6
+  header_rows: 0
+  orientation: rows
+  include: true
+  approved: true
+  dedupe_on: []
+  drop_duplicate_rows: false
+  agent_notes: Header-only table (CaptionKey, Language, Value). Sheet has exactly 1 row — no data records
+    present. Structure intended for localisation overrides but is empty for this export.
+  cleanup_instructions: ''
+  detector_signals: []
+  profile:
+    row_count: 1
+    column_count: 3
+    empty_row_count: 0
+    duplicate_row_count: 0
+    candidate_key:
+    - column_1
+    header_rows: 0
+    has_totals_row: false
+  columns:
+  - source_name: column_1
+    name: column_1
+    ordinal: 0
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: true
+    detected_format: '@'
+    sample_values:
+    - CaptionKey
+    top_values:
+    - - CaptionKey
+      - 1
+    min: null
+    max: null
+    mean: null
+    char_min: 10
+    char_max: 10
+  - source_name: column_2
+    name: column_2
+    ordinal: 1
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: true
+    detected_format: '@'
+    sample_values:
+    - Language
+    top_values:
+    - - Language
+      - 1
+    min: null
+    max: null
+    mean: null
+    char_min: 8
+    char_max: 8
+  - source_name: column_3
+    name: column_3
+    ordinal: 2
+    dtype: string
+    semantic: category
+    include: true
+    nullable: false
+    null_count: 0
+    populated_pct: 100.0
+    distinct_count: 1
+    is_unique: true
+    detected_format: '@'
+    sample_values:
+    - Value
+    top_values:
+    - - Value
+      - 1
+    min: null
+    max: null
+    mean: null
+    char_min: 5
+    char_max: 5
+skipped:
+- sheet: Pivot
+  a1_range: A1:B2
+  reason: Report filter-slicer parameter labels (CustFilter / CustFilter1 = "(All)"), not tabular data.
+    Acts as a metadata banner above the pivot table that starts at row 4.
+- sheet: Pivot
+  a1_range: G1:H2
+  reason: Identical filter-slicer parameter labels for the second pivot table (CustFilter / CustFilter1
+    = "(All)"). Metadata banner, not structured data.
+- sheet: Aggregated Metadata
+  a1_range: G1:H1
+  reason: Header row only ("Request Page Option" / "Request Page Option Value") with zero data rows —
+    no request page options were set for this report run. Single-row header with no body is not stageable
+    as a table.
+warnings:
+- 'agent summary: Processed 5 sheets. Staged 9 tables and discarded 3 non-data regions.
+
+
+  PIVOT (2 tables staged, 2 discarded):
+
+  • Discarded A1:B2 and G1:H2 — report filter-slicer parameter banners above each pivot.
+
+  • pivot_sales_order_summary_all_customers (A4:D22): 4-col pivot; customer vs. 3 sales-amount measures;
+  Grand Total in row 22; body contains paired NULL sub-rows (grouping artifact).
+
+  • pivot_sales_order_summary_filtered (G4:J11): identical structure, 6 distinct customers one row each
+  + Grand Total; cleaner than the left pivot.
+
+
+  DATA (2 tables staged):
+
+  • customer_order_summary_data (A1:BC35): primary 55-column dataset, 34 records, 1 header row. Many body
+  columns carry constant caption/label strings denormalised into every row (S–AB). Cols C, D, R consistently
+  null/empty.
+
+  • customer_order_totals_by_customer (A36:BC41): headerless 5-row per-customer totals block appended
+  below the main data; columns A–AN mostly NULL strings with real data in AM (group number), AN (customer
+  no.), AO (name), AQ–AV (sales amounts); row 41 is a Grand Total row (BC41="Total", AW–BB carry totals).
+
+
+  CAPTIONDATA (1 table staged):
+
+  • caption_key_value_lookup (A1:B39): 38 rows, internal caption key → localised display string. Candidate
+  key: Caption column.
+
+
+  AGGREGATED METADATA (3 tables staged, 1 discarded):
+
+  • report_properties (A1:B11): 10 report-level KV pairs (extension, object info, help text).
+
+  • request_properties (D1:E17): 16 execution-context KV pairs (tenant, env, company, user, date/time,
+  language, layout). Rows 15–17 keys have no values.
+
+  • Discarded G1:H1 — "Request Page Option" header only, zero data rows.
+
+  • report_filters (J1:K6): 5 active filter conditions in fully-qualified table::view::field format.
+
+
+  TRANSLATIONDATA (1 table staged):
+
+  • translation_data (A1:C1): header-only (CaptionKey / Language / Value), no data rows present in this
+  export.'
+- 'agent ended early: completed'

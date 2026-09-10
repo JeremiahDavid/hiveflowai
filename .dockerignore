@@ -1,0 +1,22 @@
+# Build context for infra/agent_image/Dockerfile is the repo root — keep it lean.
+.git
+.venv
+.pytest_cache
+**/__pycache__
+**/*.pyc
+**/*.egg-info
+cdk.out
+.cdk-bundle-cache
+.cdk-bundle
+node_modules
+data
+secrets
+docs
+tests
+**/tests
+onboarding
+tools
+t
+*.review.yaml
+.env
+.env.*

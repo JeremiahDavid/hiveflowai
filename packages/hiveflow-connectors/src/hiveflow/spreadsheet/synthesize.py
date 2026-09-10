@@ -5,7 +5,8 @@ from __future__ import annotations
 import json
 from typing import Any, Callable
 
-from hiveflow.spreadsheet.interpret import _default_invoke, _extract_json
+from hiveflow.spreadsheet._agent_runtime import text_invoke as _default_invoke
+from hiveflow.spreadsheet.interpret import _extract_json
 from hiveflow.spreadsheet.sample import (
     DEFAULT_MAX_SAMPLE_BYTES,
     flatten_oracle_windows,

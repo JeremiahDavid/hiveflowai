@@ -15,6 +15,7 @@ dev = [
     "aws-cdk-lib>=2.170.0",
     "constructs>=10.0.0",
     "pytest>=8.0.0",
+    "pytest-asyncio>=0.24.0",
 ]
 
 [tool.setuptools]
@@ -24,9 +25,15 @@ packages = []
 testpaths = [
     "tests",
     "packages/hiveflow-platform/tests",
+    "packages/hiveflow-core/tests",
+    "packages/hiveflow-spreadsheet-parser/tests",
     "packages/hiveflow-connectors/tests",
     "packages/hiveflow-lake/tests",
     "packages/hiveflow-dna/tests",
     "packages/hiveflow-portal/tests",
 ]
 norecursedirs = ["cdk.out", ".git", ".venv", "node_modules"]
+asyncio_mode = "auto"
+markers = [
+    "bedrock: test makes a live Amazon Bedrock call (needs AWS creds; skipped in CI)",
+]

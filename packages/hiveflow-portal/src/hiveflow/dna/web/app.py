@@ -9,7 +9,6 @@ from typing import Any
 
 from werkzeug.routing import Map, Rule
 from werkzeug.exceptions import NotFound
-from werkzeug.serving import run_simple
 from werkzeug.wrappers import Request, Response
 
 from hiveflow.dna.settings import DnaSettings
@@ -221,17 +220,24 @@ def run_server(
         resolve_selection,
     )
 
+    import uvicorn
+
+    from hiveflow.dna.web.asgi import create_asgi_app
+
     company, environment = resolve_selection()
     try:
         env_config = get_platform_environment_config(environment)
     except KeyError:
         env_config = get_environment_config(company, environment)
-    app = create_app(settings, company=company, environment=environment, env_config=env_config)
     print(f"{BRAND_NAME} at http://{host}:{port}/")
     print(f"Client portal login at http://{host}:{port}/portal/login")
-    if reload:
-        print("Dev reload enabled — code changes restart the server automatically.")
-    elif os.getenv("HIVEFLOW_DEV", "").strip().lower() in {"1", "true", "yes"}:
+    if not reload and os.getenv("HIVEFLOW_DEV", "").strip().lower() in {"1", "true", "yes"}:
         reload = True
+    if reload:
+        # uvicorn --reload needs an import string; expose one that rebuilds the app.
+        os.environ.setdefault("HIVEFLOW_SERVE_HOST", host)
         print("Dev reload enabled — code changes restart the server automatically.")
-    run_simple(host, port, app, use_reloader=reload, use_debugger=reload)
+        uvicorn.run("hiveflow.dna.web.asgi:get_asgi_app", factory=True, host=host, port=port, reload=True)
+        return
+    app = create_asgi_app(settings, company=company, environment=environment, env_config=env_config)
+    uvicorn.run(app, host=host, port=port)

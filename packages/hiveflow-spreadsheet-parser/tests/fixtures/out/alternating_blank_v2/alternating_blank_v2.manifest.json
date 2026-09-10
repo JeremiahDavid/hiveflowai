@@ -1,0 +1,68 @@
+{
+  "kind": "hiveflow.spreadsheet-parser/output",
+  "version": 1,
+  "source": {
+    "filename": "alternating_blank_v2.xlsx",
+    "sha256": "8565e704ae0ffba13ddd352d9b7ea40911c3f3320974782fbbc8ca99038a308e",
+    "bytes": 8638,
+    "format": "xlsx",
+    "parsed_at": "2026-09-04T16:46:11.993471Z",
+    "parser_version": "0.1.0"
+  },
+  "tables": [
+    {
+      "name": "ticket_status_hours",
+      "sheet": "Export",
+      "a1_range": "A1:C25",
+      "csv_path": "ticket_status_hours.csv",
+      "schema": [
+        {
+          "name": "ticket",
+          "dtype": "string",
+          "semantic": "free_text"
+        },
+        {
+          "name": "status",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "hours",
+          "dtype": "float",
+          "semantic": "number"
+        }
+      ],
+      "row_count_in": 24,
+      "row_count_out": 24,
+      "profile_before": {
+        "row_count": 24,
+        "column_count": 3,
+        "empty_row_count": 0,
+        "duplicate_row_count": 0,
+        "candidate_key": [],
+        "header_rows": 1,
+        "has_totals_row": false
+      },
+      "profile_after": {
+        "row_count": 24,
+        "column_count": 3,
+        "empty_row_count": 0,
+        "duplicate_row_count": 0,
+        "candidate_key": [],
+        "header_rows": 1,
+        "has_totals_row": false
+      },
+      "transforms_applied": [
+        "coerced 'ticket' to string",
+        "coerced 'status' to string",
+        "coerced 'hours' to float"
+      ],
+      "warnings": []
+    }
+  ],
+  "skipped": [],
+  "warnings": [
+    "agent summary: 1 sheet (\"Export\"), 1 table staged. The sheet contains a single 3-column table (ticket, status, hours) covering A1:C25 with a 1-row header. 12 logical records (T-200 \u2013 T-211) are each stored across two physical rows \u2014 ticket ID in col A on one row, status + hours in cols B\u2013C on the next \u2014 giving the alternating fill pattern the detector flagged as low-confidence. The extractor must pair consecutive data rows before processing. No banners, metadata, totals rows, or additional tables are present.",
+    "agent ended early: completed"
+  ]
+}

@@ -1,40 +1,31 @@
 from __future__ import annotations
 
-import os
 from typing import Any
 
-from hiveflow.dna.runtime import resolve_dna_settings
-from hiveflow.dna.web.app import create_app
-from hiveflow.dna.web.theme import BINARY_STATIC_CONTENT_TYPES
+from hiveflow.dna.web.asgi import get_asgi_app
 
-_wsgi_app = None
+_mangum = None
 
 
-def _get_wsgi_app():
-    global _wsgi_app  # noqa: PLW0603 — Lambda container reuse
-    if _wsgi_app is None:
-        from hiveflow.project_config import (
-            ensure_writable_config_path,
-            get_environment_config,
-            get_platform_environment_config,
-            resolve_selection,
+def _get_mangum():
+    global _mangum  # noqa: PLW0603 — Lambda container reuse
+    if _mangum is None:
+        from mangum import Mangum
+
+        # The FastAPI shell owns lifespan; text_mime_types keeps SVG/JS/CSS/JSON
+        # out of base64 while images and the .xlsx download stay binary (matches
+        # the old BINARY_STATIC_CONTENT_TYPES split under aws-wsgi).
+        _mangum = Mangum(
+            get_asgi_app(),
+            lifespan="off",
+            text_mime_types=[
+                "application/json",
+                "application/javascript",
+                "application/xml",
+                "image/svg+xml",
+            ],
         )
-
-        ensure_writable_config_path()
-        company, environment = resolve_selection()
-        try:
-            env_config = get_platform_environment_config(environment)
-        except KeyError:
-            env_config = get_environment_config(company, environment)
-
-        _wsgi_app = create_app(
-            resolve_dna_settings(),
-            company=company,
-            environment=environment,
-            env_config=env_config,
-            ui_mode=os.getenv("HIVEFLOW_UI_MODE"),
-        )
-    return _wsgi_app
+    return _mangum
 
 
 def _cfn_reporting_init(event: dict[str, Any]) -> dict[str, Any]:
@@ -95,16 +86,4 @@ def ui_handler(event: dict[str, Any] | None, context: Any) -> dict[str, Any]:
 
         return run_kpi_generation_job(resolve_dna_settings(), payload)
 
-    try:
-        import awsgi
-    except ImportError as exc:
-        raise RuntimeError(
-            "aws-wsgi is required for the DNA UI Lambda. Install hiveflow with dependencies."
-        ) from exc
-
-    return awsgi.response(
-        _get_wsgi_app(),
-        event,
-        context,
-        base64_content_types=BINARY_STATIC_CONTENT_TYPES,
-    )
+    return _get_mangum()(event, context)

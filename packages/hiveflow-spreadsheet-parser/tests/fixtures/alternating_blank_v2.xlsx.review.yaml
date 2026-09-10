@@ -1,0 +1,145 @@
+# HiveFlow spreadsheet-parser — review file.
+# Edit column names / dtype / semantic / include / ordinal, adjust a1_range or
+# header_rows, then set `approved: true` on the tables you want written.
+# Run:  hiveflow-parse apply <this-file> --out out/
+kind: hiveflow.spreadsheet-parser/review
+version: 1
+source:
+  filename: alternating_blank_v2.xlsx
+  sha256: 8565e704ae0ffba13ddd352d9b7ea40911c3f3320974782fbbc8ca99038a308e
+  bytes: 8638
+  format: xlsx
+  parsed_at: '2026-09-04T16:46:11.993471Z'
+  parser_version: 0.1.0
+tables:
+- id: Export!A1:C25
+  name: ticket_status_hours
+  sheet: Export
+  a1_range: A1:C25
+  kind: table
+  confidence: 0.28
+  header_rows: 1
+  orientation: rows
+  include: true
+  approved: true
+  dedupe_on: []
+  drop_duplicate_rows: false
+  agent_notes: 'Each logical record is split across two physical rows: ticket ID alone in col A (rows
+    2, 4, 6 …), then status + hours in cols B–C on the immediately following row (rows 3, 5, 7 …). 12
+    records total, T-200 through T-211. Extractor must merge each consecutive pair of data rows into one
+    logical record before processing.'
+  cleanup_instructions: ''
+  detector_signals: []
+  profile:
+    row_count: 24
+    column_count: 3
+    empty_row_count: 0
+    duplicate_row_count: 0
+    candidate_key: []
+    header_rows: 1
+    has_totals_row: false
+  columns:
+  - source_name: ticket
+    name: ticket
+    ordinal: 0
+    dtype: string
+    semantic: free_text
+    include: true
+    nullable: true
+    null_count: 12
+    populated_pct: 50.0
+    distinct_count: 12
+    is_unique: false
+    detected_format: null
+    sample_values:
+    - T-200
+    - T-201
+    - T-202
+    - T-203
+    - T-204
+    top_values:
+    - - T-200
+      - 1
+    - - T-201
+      - 1
+    - - T-202
+      - 1
+    - - T-203
+      - 1
+    - - T-204
+      - 1
+    min: null
+    max: null
+    mean: null
+    char_min: 5
+    char_max: 5
+  - source_name: status
+    name: status
+    ordinal: 1
+    dtype: string
+    semantic: category
+    include: true
+    nullable: true
+    null_count: 12
+    populated_pct: 50.0
+    distinct_count: 3
+    is_unique: false
+    detected_format: null
+    sample_values:
+    - open
+    - closed
+    - pending
+    top_values:
+    - - open
+      - 4
+    - - closed
+      - 4
+    - - pending
+      - 4
+    min: null
+    max: null
+    mean: null
+    char_min: 4
+    char_max: 7
+  - source_name: hours
+    name: hours
+    ordinal: 2
+    dtype: float
+    semantic: number
+    include: true
+    nullable: true
+    null_count: 12
+    populated_pct: 50.0
+    distinct_count: 12
+    is_unique: false
+    detected_format: null
+    sample_values:
+    - 1.25
+    - 2.5
+    - 3.75
+    - 5
+    - 6.25
+    top_values:
+    - - 1.25
+      - 1
+    - - 2.5
+      - 1
+    - - 3.75
+      - 1
+    - - 5
+      - 1
+    - - 6.25
+      - 1
+    min: 1.25
+    max: 15
+    mean: 8.125
+    char_min: null
+    char_max: null
+skipped: []
+warnings:
+- 'agent summary: 1 sheet ("Export"), 1 table staged. The sheet contains a single 3-column table (ticket,
+  status, hours) covering A1:C25 with a 1-row header. 12 logical records (T-200 – T-211) are each stored
+  across two physical rows — ticket ID in col A on one row, status + hours in cols B–C on the next — giving
+  the alternating fill pattern the detector flagged as low-confidence. The extractor must pair consecutive
+  data rows before processing. No banners, metadata, totals rows, or additional tables are present.'
+- 'agent ended early: completed'

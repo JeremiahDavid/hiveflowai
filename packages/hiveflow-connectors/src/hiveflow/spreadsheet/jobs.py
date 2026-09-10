@@ -352,7 +352,19 @@ def run_interpret(job_id: str, *, force_ai: bool = False) -> dict[str, Any]:
     profile_payload = _read_json(spreadsheet_engine_job_profile_key(job_id))
     if not parse_payload or not profile_payload:
         raise ValueError(f"Missing parse/profile output for job {job_id!r}")
-    report = interpret_tables(parse_payload, profile_payload)
+
+    filename = str(job.get("filename") or "workbook.xlsx")
+    upload_key = str(job.get("upload_key") or spreadsheet_engine_job_upload_key(job_id, filename))
+    with tempfile.TemporaryDirectory() as tmp:
+        local_path = Path(tmp) / filename
+        try:
+            local_path.write_bytes(_read_bytes(upload_key))
+            workbook_path: str | None = str(local_path)
+        except Exception:  # noqa: BLE001 — agent pass is optional; single-shot still works
+            workbook_path = None
+        report = interpret_tables(
+            parse_payload, profile_payload, workbook_path=workbook_path
+        )
     report["job_id"] = job_id
     _write_json(spreadsheet_engine_job_report_key(job_id), report)
     for table in report.get("tables") or []:

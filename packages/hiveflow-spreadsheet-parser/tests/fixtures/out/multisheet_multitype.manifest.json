@@ -1,0 +1,1116 @@
+{
+  "kind": "hiveflow.spreadsheet-parser/output",
+  "version": 1,
+  "source": {
+    "filename": "multisheet_multitype.xlsx",
+    "sha256": "91d48b7abd71c545f2fbd832efe003174ef2c569b7542415c02072ba5863e7d8",
+    "bytes": 40339,
+    "format": "xlsx",
+    "parsed_at": "2026-09-04T15:02:22.893728Z",
+    "parser_version": "0.1.0"
+  },
+  "tables": [
+    {
+      "name": "report_properties",
+      "sheet": "Aggregated Metadata",
+      "a1_range": "A1:B11",
+      "csv_path": "report_properties.csv",
+      "schema": [
+        {
+          "name": "report_property",
+          "dtype": "string",
+          "semantic": "free_text"
+        },
+        {
+          "name": "report_property_value",
+          "dtype": "string",
+          "semantic": "free_text"
+        }
+      ],
+      "row_count_in": 10,
+      "row_count_out": 10,
+      "profile_before": {
+        "row_count": 10,
+        "column_count": 2,
+        "empty_row_count": 0,
+        "duplicate_row_count": 0,
+        "candidate_key": [
+          "report_property"
+        ],
+        "header_rows": 1,
+        "has_totals_row": false
+      },
+      "profile_after": {
+        "row_count": 10,
+        "column_count": 2,
+        "empty_row_count": 0,
+        "duplicate_row_count": 0,
+        "candidate_key": [
+          "report_property"
+        ],
+        "header_rows": 1,
+        "has_totals_row": false
+      },
+      "transforms_applied": [
+        "coerced 'report_property' to string",
+        "coerced 'report_property_value' to string"
+      ],
+      "warnings": []
+    },
+    {
+      "name": "request_properties",
+      "sheet": "Aggregated Metadata",
+      "a1_range": "D1:E17",
+      "csv_path": "request_properties.csv",
+      "schema": [
+        {
+          "name": "request_property",
+          "dtype": "string",
+          "semantic": "free_text"
+        },
+        {
+          "name": "request_property_value",
+          "dtype": "string",
+          "semantic": "free_text"
+        }
+      ],
+      "row_count_in": 16,
+      "row_count_out": 16,
+      "profile_before": {
+        "row_count": 16,
+        "column_count": 2,
+        "empty_row_count": 0,
+        "duplicate_row_count": 0,
+        "candidate_key": [
+          "request_property"
+        ],
+        "header_rows": 1,
+        "has_totals_row": false
+      },
+      "profile_after": {
+        "row_count": 16,
+        "column_count": 2,
+        "empty_row_count": 0,
+        "duplicate_row_count": 0,
+        "candidate_key": [
+          "request_property"
+        ],
+        "header_rows": 1,
+        "has_totals_row": false
+      },
+      "transforms_applied": [
+        "coerced 'request_property' to string",
+        "coerced 'request_property_value' to string"
+      ],
+      "warnings": []
+    },
+    {
+      "name": "report_filters",
+      "sheet": "Aggregated Metadata",
+      "a1_range": "J1:K6",
+      "csv_path": "report_filters.csv",
+      "schema": [
+        {
+          "name": "filter",
+          "dtype": "string",
+          "semantic": "free_text"
+        },
+        {
+          "name": "filter_value",
+          "dtype": "string",
+          "semantic": "free_text"
+        }
+      ],
+      "row_count_in": 4,
+      "row_count_out": 4,
+      "profile_before": {
+        "row_count": 4,
+        "column_count": 2,
+        "empty_row_count": 0,
+        "duplicate_row_count": 0,
+        "candidate_key": [
+          "filter"
+        ],
+        "header_rows": 1,
+        "has_totals_row": true
+      },
+      "profile_after": {
+        "row_count": 4,
+        "column_count": 2,
+        "empty_row_count": 0,
+        "duplicate_row_count": 0,
+        "candidate_key": [
+          "filter"
+        ],
+        "header_rows": 1,
+        "has_totals_row": false
+      },
+      "transforms_applied": [
+        "coerced 'filter' to string",
+        "coerced 'filter_value' to string"
+      ],
+      "warnings": []
+    },
+    {
+      "name": "caption_key_value_lookup",
+      "sheet": "CaptionData",
+      "a1_range": "A1:B39",
+      "csv_path": "caption_key_value_lookup.csv",
+      "schema": [
+        {
+          "name": "caption",
+          "dtype": "string",
+          "semantic": "free_text"
+        },
+        {
+          "name": "value",
+          "dtype": "string",
+          "semantic": "free_text"
+        }
+      ],
+      "row_count_in": 38,
+      "row_count_out": 38,
+      "profile_before": {
+        "row_count": 38,
+        "column_count": 2,
+        "empty_row_count": 0,
+        "duplicate_row_count": 0,
+        "candidate_key": [
+          "caption"
+        ],
+        "header_rows": 1,
+        "has_totals_row": false
+      },
+      "profile_after": {
+        "row_count": 38,
+        "column_count": 2,
+        "empty_row_count": 0,
+        "duplicate_row_count": 0,
+        "candidate_key": [
+          "caption"
+        ],
+        "header_rows": 1,
+        "has_totals_row": false
+      },
+      "transforms_applied": [
+        "coerced 'caption' to string",
+        "coerced 'value' to string"
+      ],
+      "warnings": []
+    },
+    {
+      "name": "customer_order_summary_data",
+      "sheet": "Data",
+      "a1_range": "A1:BC35",
+      "csv_path": "customer_order_summary_data.csv",
+      "schema": [
+        {
+          "name": "companyname",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "printamountsinlcy",
+          "dtype": "bool",
+          "semantic": "boolean"
+        },
+        {
+          "name": "custfilter",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "custfilter1",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "periodstartdate1",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "periodstartdate2",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "periodstartdate3",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "periodstartdate21",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "periodstartdate31",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "periodstartdate41",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "salesamtonorderlcy1",
+          "dtype": "float",
+          "semantic": "currency"
+        },
+        {
+          "name": "salesamtonorderlcy2",
+          "dtype": "int",
+          "semantic": "currency"
+        },
+        {
+          "name": "salesamtonorderlcy3",
+          "dtype": "int",
+          "semantic": "currency"
+        },
+        {
+          "name": "salesamtonorderlcy4",
+          "dtype": "int",
+          "semantic": "currency"
+        },
+        {
+          "name": "salesamtonorderlcy5",
+          "dtype": "int",
+          "semantic": "currency"
+        },
+        {
+          "name": "salesorderamountlcy",
+          "dtype": "float",
+          "semantic": "currency"
+        },
+        {
+          "name": "no_cust",
+          "dtype": "int",
+          "semantic": "number"
+        },
+        {
+          "name": "allamountsareinlcytxt",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "totalcaption",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "customerordersummarycaption",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "pagenocaption",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "allamountsareinlcycaption",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "outstandingorderscaption",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "customernocaption",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "customernamecaption",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "beforecaption",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "aftercaption",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "totallcycaption",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "salesorderamount",
+          "dtype": "float",
+          "semantic": "currency"
+        },
+        {
+          "name": "salesamtonorder5",
+          "dtype": "int",
+          "semantic": "currency"
+        },
+        {
+          "name": "salesamtonorder4",
+          "dtype": "int",
+          "semantic": "currency"
+        },
+        {
+          "name": "salesamtonorder3",
+          "dtype": "int",
+          "semantic": "currency"
+        },
+        {
+          "name": "salesamtonorder2",
+          "dtype": "int",
+          "semantic": "currency"
+        },
+        {
+          "name": "salesamtonorder1",
+          "dtype": "float",
+          "semantic": "currency"
+        },
+        {
+          "name": "currencycode_salesline",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "name_cust",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "saleslinebilltono_customer",
+          "dtype": "int",
+          "semantic": "currency"
+        },
+        {
+          "name": "groupnumber",
+          "dtype": "int",
+          "semantic": "number"
+        },
+        {
+          "name": "number",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "saleslinebuffer_billtocustomerno",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "saleslinebuffer_customername",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "saleslinebuffer_currencycode",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "saleslinebuffer_salesorderamount",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "saleslinebuffer_salesamtonorder1",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "saleslinebuffer_salesamtonorder2",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "saleslinebuffer_salesamtonorder3",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "saleslinebuffer_salesamtonorder4",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "saleslinebuffer_salesamtonorder5",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "totals_sales_order_amount",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "totals_sales_amt_on_order1",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "totals_sales_amt_on_order2",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "totals_sales_amt_on_order3",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "totals_sales_amt_on_order4",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "totals_sales_amt_on_order5",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "totals_totaltext",
+          "dtype": "string",
+          "semantic": "category"
+        }
+      ],
+      "row_count_in": 34,
+      "row_count_out": 34,
+      "profile_before": {
+        "row_count": 34,
+        "column_count": 55,
+        "empty_row_count": 0,
+        "duplicate_row_count": 3,
+        "candidate_key": [],
+        "header_rows": 1,
+        "has_totals_row": false
+      },
+      "profile_after": {
+        "row_count": 34,
+        "column_count": 55,
+        "empty_row_count": 0,
+        "duplicate_row_count": 3,
+        "candidate_key": [],
+        "header_rows": 1,
+        "has_totals_row": false
+      },
+      "transforms_applied": [
+        "coerced 'companyname' to string",
+        "coerced 'printamountsinlcy' to bool",
+        "coerced 'custfilter' to string",
+        "coerced 'custfilter1' to string",
+        "coerced 'periodstartdate1' to string",
+        "coerced 'periodstartdate2' to string",
+        "coerced 'periodstartdate3' to string",
+        "coerced 'periodstartdate21' to string",
+        "coerced 'periodstartdate31' to string",
+        "coerced 'periodstartdate41' to string",
+        "coerced 'salesamtonorderlcy1' to float",
+        "coerced 'salesamtonorderlcy2' to int",
+        "coerced 'salesamtonorderlcy3' to int",
+        "coerced 'salesamtonorderlcy4' to int",
+        "coerced 'salesamtonorderlcy5' to int",
+        "coerced 'salesorderamountlcy' to float",
+        "coerced 'no_cust' to int",
+        "coerced 'allamountsareinlcytxt' to string",
+        "coerced 'totalcaption' to string",
+        "coerced 'customerordersummarycaption' to string",
+        "coerced 'pagenocaption' to string",
+        "coerced 'allamountsareinlcycaption' to string",
+        "coerced 'outstandingorderscaption' to string",
+        "coerced 'customernocaption' to string",
+        "coerced 'customernamecaption' to string",
+        "coerced 'beforecaption' to string",
+        "coerced 'aftercaption' to string",
+        "coerced 'totallcycaption' to string",
+        "coerced 'salesorderamount' to float",
+        "coerced 'salesamtonorder5' to int",
+        "coerced 'salesamtonorder4' to int",
+        "coerced 'salesamtonorder3' to int",
+        "coerced 'salesamtonorder2' to int",
+        "coerced 'salesamtonorder1' to float",
+        "coerced 'currencycode_salesline' to string",
+        "coerced 'name_cust' to string",
+        "coerced 'saleslinebilltono_customer' to int",
+        "coerced 'groupnumber' to int",
+        "coerced 'number' to string",
+        "coerced 'saleslinebuffer_billtocustomerno' to string",
+        "coerced 'saleslinebuffer_customername' to string",
+        "coerced 'saleslinebuffer_currencycode' to string",
+        "coerced 'saleslinebuffer_salesorderamount' to string",
+        "coerced 'saleslinebuffer_salesamtonorder1' to string",
+        "coerced 'saleslinebuffer_salesamtonorder2' to string",
+        "coerced 'saleslinebuffer_salesamtonorder3' to string",
+        "coerced 'saleslinebuffer_salesamtonorder4' to string",
+        "coerced 'saleslinebuffer_salesamtonorder5' to string",
+        "coerced 'totals_sales_order_amount' to string",
+        "coerced 'totals_sales_amt_on_order1' to string",
+        "coerced 'totals_sales_amt_on_order2' to string",
+        "coerced 'totals_sales_amt_on_order3' to string",
+        "coerced 'totals_sales_amt_on_order4' to string",
+        "coerced 'totals_sales_amt_on_order5' to string",
+        "coerced 'totals_totaltext' to string"
+      ],
+      "warnings": []
+    },
+    {
+      "name": "customer_order_totals_by_customer",
+      "sheet": "Data",
+      "a1_range": "A36:BC41",
+      "csv_path": "customer_order_totals_by_customer.csv",
+      "schema": [
+        {
+          "name": "null",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "null_2",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "null_3",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "null_4",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "null_5",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "null_6",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "null_7",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "null_8",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "null_9",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "null_10",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "null_11",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "null_12",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "null_13",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "null_14",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "null_15",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "null_16",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "null_17",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "null_18",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "null_19",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "null_20",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "null_21",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "null_22",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "null_23",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "null_24",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "null_25",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "null_26",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "null_27",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "null_28",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "null_29",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "null_30",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "null_31",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "null_32",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "null_33",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "null_34",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "null_35",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "null_36",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "null_37",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "null_38",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "1",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "10000",
+          "dtype": "string",
+          "semantic": "free_text"
+        },
+        {
+          "name": "adatum_corporation",
+          "dtype": "string",
+          "semantic": "percent"
+        },
+        {
+          "name": "column_42",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "43334_7",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "43334_7_2",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "0",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "0_2",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "0_3",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "0_4",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "null_39",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "null_40",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "null_41",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "null_42",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "null_43",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "null_44",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "null_45",
+          "dtype": "string",
+          "semantic": "category"
+        }
+      ],
+      "row_count_in": 5,
+      "row_count_out": 5,
+      "profile_before": {
+        "row_count": 5,
+        "column_count": 55,
+        "empty_row_count": 0,
+        "duplicate_row_count": 0,
+        "candidate_key": [
+          "1"
+        ],
+        "header_rows": 1,
+        "has_totals_row": false
+      },
+      "profile_after": {
+        "row_count": 5,
+        "column_count": 55,
+        "empty_row_count": 0,
+        "duplicate_row_count": 0,
+        "candidate_key": [
+          "1"
+        ],
+        "header_rows": 1,
+        "has_totals_row": false
+      },
+      "transforms_applied": [
+        "coerced 'null' to string",
+        "coerced 'null_2' to string",
+        "coerced 'null_3' to string",
+        "coerced 'null_4' to string",
+        "coerced 'null_5' to string",
+        "coerced 'null_6' to string",
+        "coerced 'null_7' to string",
+        "coerced 'null_8' to string",
+        "coerced 'null_9' to string",
+        "coerced 'null_10' to string",
+        "coerced 'null_11' to string",
+        "coerced 'null_12' to string",
+        "coerced 'null_13' to string",
+        "coerced 'null_14' to string",
+        "coerced 'null_15' to string",
+        "coerced 'null_16' to string",
+        "coerced 'null_17' to string",
+        "coerced 'null_18' to string",
+        "coerced 'null_19' to string",
+        "coerced 'null_20' to string",
+        "coerced 'null_21' to string",
+        "coerced 'null_22' to string",
+        "coerced 'null_23' to string",
+        "coerced 'null_24' to string",
+        "coerced 'null_25' to string",
+        "coerced 'null_26' to string",
+        "coerced 'null_27' to string",
+        "coerced 'null_28' to string",
+        "coerced 'null_29' to string",
+        "coerced 'null_30' to string",
+        "coerced 'null_31' to string",
+        "coerced 'null_32' to string",
+        "coerced 'null_33' to string",
+        "coerced 'null_34' to string",
+        "coerced 'null_35' to string",
+        "coerced 'null_36' to string",
+        "coerced 'null_37' to string",
+        "coerced 'null_38' to string",
+        "coerced '1' to string",
+        "coerced '10000' to string",
+        "coerced 'adatum_corporation' to string",
+        "coerced 'column_42' to string",
+        "coerced '43334_7' to string",
+        "coerced '43334_7_2' to string",
+        "coerced '0' to string",
+        "coerced '0_2' to string",
+        "coerced '0_3' to string",
+        "coerced '0_4' to string",
+        "coerced 'null_39' to string",
+        "coerced 'null_40' to string",
+        "coerced 'null_41' to string",
+        "coerced 'null_42' to string",
+        "coerced 'null_43' to string",
+        "coerced 'null_44' to string",
+        "coerced 'null_45' to string"
+      ],
+      "warnings": []
+    },
+    {
+      "name": "pivot_sales_order_summary_all_customers",
+      "sheet": "Pivot",
+      "a1_range": "A4:D22",
+      "csv_path": "pivot_sales_order_summary_all_customers.csv",
+      "schema": [
+        {
+          "name": "row_labels",
+          "dtype": "string",
+          "semantic": "free_text"
+        },
+        {
+          "name": "sum_of_salesamtonorderlcy1",
+          "dtype": "float",
+          "semantic": "currency"
+        },
+        {
+          "name": "sum_of_totals_sales_order_amount",
+          "dtype": "float",
+          "semantic": "currency"
+        },
+        {
+          "name": "sum_of_salesorderamount",
+          "dtype": "float",
+          "semantic": "currency"
+        }
+      ],
+      "row_count_in": 17,
+      "row_count_out": 17,
+      "profile_before": {
+        "row_count": 17,
+        "column_count": 4,
+        "empty_row_count": 0,
+        "duplicate_row_count": 1,
+        "candidate_key": [],
+        "header_rows": 1,
+        "has_totals_row": true
+      },
+      "profile_after": {
+        "row_count": 17,
+        "column_count": 4,
+        "empty_row_count": 0,
+        "duplicate_row_count": 1,
+        "candidate_key": [],
+        "header_rows": 1,
+        "has_totals_row": false
+      },
+      "transforms_applied": [
+        "coerced 'row_labels' to string",
+        "coerced 'sum_of_salesamtonorderlcy1' to float",
+        "coerced 'sum_of_totals_sales_order_amount' to float",
+        "coerced 'sum_of_salesorderamount' to float"
+      ],
+      "warnings": []
+    },
+    {
+      "name": "pivot_sales_order_summary_filtered",
+      "sheet": "Pivot",
+      "a1_range": "G4:J11",
+      "csv_path": "pivot_sales_order_summary_filtered.csv",
+      "schema": [
+        {
+          "name": "row_labels",
+          "dtype": "string",
+          "semantic": "free_text"
+        },
+        {
+          "name": "sum_of_salesamtonorderlcy1",
+          "dtype": "float",
+          "semantic": "currency"
+        },
+        {
+          "name": "sum_of_totals_sales_order_amount",
+          "dtype": "float",
+          "semantic": "currency"
+        },
+        {
+          "name": "sum_of_salesorderamount",
+          "dtype": "float",
+          "semantic": "currency"
+        }
+      ],
+      "row_count_in": 6,
+      "row_count_out": 6,
+      "profile_before": {
+        "row_count": 6,
+        "column_count": 4,
+        "empty_row_count": 0,
+        "duplicate_row_count": 0,
+        "candidate_key": [
+          "row_labels"
+        ],
+        "header_rows": 1,
+        "has_totals_row": true
+      },
+      "profile_after": {
+        "row_count": 6,
+        "column_count": 4,
+        "empty_row_count": 0,
+        "duplicate_row_count": 0,
+        "candidate_key": [
+          "row_labels"
+        ],
+        "header_rows": 1,
+        "has_totals_row": false
+      },
+      "transforms_applied": [
+        "coerced 'row_labels' to string",
+        "coerced 'sum_of_salesamtonorderlcy1' to float",
+        "coerced 'sum_of_totals_sales_order_amount' to float",
+        "coerced 'sum_of_salesorderamount' to float"
+      ],
+      "warnings": []
+    },
+    {
+      "name": "translation_data",
+      "sheet": "TranslationData",
+      "a1_range": "A1:C1",
+      "csv_path": "translation_data.csv",
+      "schema": [
+        {
+          "name": "column_1",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "column_2",
+          "dtype": "string",
+          "semantic": "category"
+        },
+        {
+          "name": "column_3",
+          "dtype": "string",
+          "semantic": "category"
+        }
+      ],
+      "row_count_in": 1,
+      "row_count_out": 1,
+      "profile_before": {
+        "row_count": 1,
+        "column_count": 3,
+        "empty_row_count": 0,
+        "duplicate_row_count": 0,
+        "candidate_key": [
+          "column_1"
+        ],
+        "header_rows": 0,
+        "has_totals_row": false
+      },
+      "profile_after": {
+        "row_count": 1,
+        "column_count": 3,
+        "empty_row_count": 0,
+        "duplicate_row_count": 0,
+        "candidate_key": [
+          "column_1"
+        ],
+        "header_rows": 1,
+        "has_totals_row": false
+      },
+      "transforms_applied": [
+        "coerced 'column_1' to string",
+        "coerced 'column_2' to string",
+        "coerced 'column_3' to string"
+      ],
+      "warnings": []
+    }
+  ],
+  "skipped": [
+    {
+      "sheet": "Pivot",
+      "a1_range": "A1:B2",
+      "reason": "Report filter-slicer parameter labels (CustFilter / CustFilter1 = \"(All)\"), not tabular data. Acts as a metadata banner above the pivot table that starts at row 4."
+    },
+    {
+      "sheet": "Pivot",
+      "a1_range": "G1:H2",
+      "reason": "Identical filter-slicer parameter labels for the second pivot table (CustFilter / CustFilter1 = \"(All)\"). Metadata banner, not structured data."
+    },
+    {
+      "sheet": "Aggregated Metadata",
+      "a1_range": "G1:H1",
+      "reason": "Header row only (\"Request Page Option\" / \"Request Page Option Value\") with zero data rows \u2014 no request page options were set for this report run. Single-row header with no body is not stageable as a table."
+    }
+  ],
+  "warnings": [
+    "agent summary: Processed 5 sheets. Staged 9 tables and discarded 3 non-data regions.\n\nPIVOT (2 tables staged, 2 discarded):\n\u2022 Discarded A1:B2 and G1:H2 \u2014 report filter-slicer parameter banners above each pivot.\n\u2022 pivot_sales_order_summary_all_customers (A4:D22): 4-col pivot; customer vs. 3 sales-amount measures; Grand Total in row 22; body contains paired NULL sub-rows (grouping artifact).\n\u2022 pivot_sales_order_summary_filtered (G4:J11): identical structure, 6 distinct customers one row each + Grand Total; cleaner than the left pivot.\n\nDATA (2 tables staged):\n\u2022 customer_order_summary_data (A1:BC35): primary 55-column dataset, 34 records, 1 header row. Many body columns carry constant caption/label strings denormalised into every row (S\u2013AB). Cols C, D, R consistently null/empty.\n\u2022 customer_order_totals_by_customer (A36:BC41): headerless 5-row per-customer totals block appended below the main data; columns A\u2013AN mostly NULL strings with real data in AM (group number), AN (customer no.), AO (name), AQ\u2013AV (sales amounts); row 41 is a Grand Total row (BC41=\"Total\", AW\u2013BB carry totals).\n\nCAPTIONDATA (1 table staged):\n\u2022 caption_key_value_lookup (A1:B39): 38 rows, internal caption key \u2192 localised display string. Candidate key: Caption column.\n\nAGGREGATED METADATA (3 tables staged, 1 discarded):\n\u2022 report_properties (A1:B11): 10 report-level KV pairs (extension, object info, help text).\n\u2022 request_properties (D1:E17): 16 execution-context KV pairs (tenant, env, company, user, date/time, language, layout). Rows 15\u201317 keys have no values.\n\u2022 Discarded G1:H1 \u2014 \"Request Page Option\" header only, zero data rows.\n\u2022 report_filters (J1:K6): 5 active filter conditions in fully-qualified table::view::field format.\n\nTRANSLATIONDATA (1 table staged):\n\u2022 translation_data (A1:C1): header-only (CaptionKey / Language / Value), no data rows present in this export.",
+    "agent ended early: completed"
+  ]
+}
