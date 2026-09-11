@@ -1,0 +1,10 @@
+
+    <div class="spreadsheet-file-nav-wrap">
+      <nav class="{{ nav_class }}" aria-label="{{ aria_label }}">{% for chip in chips %}<span class="source-docs-source-chip spreadsheet-file-chip{% if chip.active %} is-active{% endif %}"><a class="spreadsheet-file-chip-link" href="{{ chip.href }}">{{ chip.name }}<span class="source-docs-source-badge{% if not chip.done %} is-empty{% endif %}">{{ chip.badge }}</span></a>{% if is_admin %}<form method="post" class="spreadsheet-file-chip-reject" onsubmit="return window.confirm('Reject {{ chip.name }}? Catalogued tables are not affected.');"><input type="hidden" name="action" value="reject_job" /><input type="hidden" name="job_id" value="{{ chip.job_id }}" /><button type="submit" class="spreadsheet-file-chip-reject-btn" title="Reject {{ chip.name }}" aria-label="Reject {{ chip.name }}" formnovalidate>&times;</button></form>{% endif %}</span>{% endfor %}</nav>
+      {% if is_admin and chips|length > 1 %}
+      <form method="post" class="spreadsheet-file-reject-all" onsubmit="return window.confirm('Reject all {{ chips|length }} workbooks in review? Catalogued tables are not affected.');">
+        <input type="hidden" name="action" value="reject_all_jobs" />
+        <button type="submit" class="btn btn-secondary spreadsheet-file-reject-all-btn" formnovalidate>Reject all files</button>
+      </form>
+      {% endif %}
+    </div>

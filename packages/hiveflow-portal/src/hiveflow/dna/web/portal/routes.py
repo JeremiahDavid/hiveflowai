@@ -1904,6 +1904,7 @@ def build_portal_routes(
                 link_job_catalog,
                 parse_upload,
                 refresh_joins,
+                reject_all_jobs,
                 reject_clean_shape,
                 reject_joins,
                 reject_job,
@@ -2177,6 +2178,23 @@ def build_portal_routes(
                     }
                     if remaining:
                         params["table_index"] = "0"
+                    return _redirect(
+                        request,
+                        f"/portal/semantics/source-docs/sse?{urlencode(params)}",
+                    )
+                if action == "reject_all_jobs":
+                    removed = reject_all_jobs(
+                        portal_settings,
+                        username=session.username,
+                    )
+                    params = {
+                        "tab": "review",
+                        "msg": (
+                            f"Removed {removed} workbook{'s' if removed != 1 else ''} from review."
+                            if removed
+                            else "No workbooks to remove from review."
+                        ),
+                    }
                     return _redirect(
                         request,
                         f"/portal/semantics/source-docs/sse?{urlencode(params)}",

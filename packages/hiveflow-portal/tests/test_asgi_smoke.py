@@ -104,3 +104,35 @@ def test_stage_prefix_from_execute_api_event(tmp_path: Path) -> None:
     body = resp["body"]
     # generated links (form action, static hrefs) should carry the stage prefix
     assert "/prod/portal/login" in body or "/prod/static/" in body
+
+
+def test_login_post_without_content_length_header(tmp_path: Path, portal_env: None) -> None:
+    """Real API Gateway events omit Content-Length for HTTP/2 clients; a2wsgi's
+    WSGI bridge treats that as an empty body and silently drops POST form
+    fields (regression — see incident: "Invalid username or password" with
+    correct credentials). ``_ContentLengthMiddleware`` must synthesize an
+    accurate header from the base64-decoded body before a2wsgi ever sees it.
+    """
+    import base64
+
+    from mangum import Mangum
+
+    handler = Mangum(_asgi(tmp_path), lifespan="off")
+    form_body = "action=sign_in&next=%2Fportal&client_id=poc&username=poc&password=changeme"
+    event = {
+        "version": "1.0",
+        "httpMethod": "POST",
+        "path": "/portal/login",
+        "headers": {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Host": "hive-flow-ai.com",
+            # deliberately no Content-Type-adjacent Content-Length header
+        },
+        "requestContext": {"stage": "prod", "httpMethod": "POST", "path": "/prod/portal/login"},
+        "queryStringParameters": None,
+        "body": base64.b64encode(form_body.encode()).decode(),
+        "isBase64Encoded": True,
+    }
+    resp = handler(event, None)
+    assert resp["statusCode"] in (302, 303), resp["body"]
+    assert "Invalid username or password" not in resp["body"]

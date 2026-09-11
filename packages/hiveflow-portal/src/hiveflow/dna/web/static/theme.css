@@ -4276,6 +4276,62 @@
       margin-bottom: 0.85rem;
     }
 
+    .spreadsheet-file-nav-wrap {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      gap: 0.6rem;
+      margin-bottom: 0.85rem;
+    }
+
+    .spreadsheet-file-nav-wrap .spreadsheet-file-nav {
+      margin-bottom: 0;
+      flex: 1 1 auto;
+    }
+
+    .spreadsheet-file-chip {
+      padding-right: 0.4rem;
+    }
+
+    .spreadsheet-file-chip-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      color: inherit;
+      text-decoration: none;
+    }
+
+    .spreadsheet-file-chip-reject {
+      display: inline;
+      margin: 0;
+    }
+
+    .spreadsheet-file-chip-reject-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 1.15rem;
+      height: 1.15rem;
+      padding: 0;
+      border: 0;
+      border-radius: 999px;
+      background: transparent;
+      color: var(--text-muted);
+      font-size: 0.95rem;
+      line-height: 1;
+      cursor: pointer;
+    }
+
+    .spreadsheet-file-chip-reject-btn:hover {
+      background: rgba(var(--danger-rgb), 0.18);
+      color: var(--danger, #b5544c);
+    }
+
+    .spreadsheet-file-reject-all {
+      margin: 0;
+      flex: 0 0 auto;
+    }
+
     .spreadsheet-file-diff-nav {
       margin-bottom: 0.65rem;
     }

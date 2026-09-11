@@ -58,6 +58,57 @@ class _ConfigRefreshMiddleware:
         await self.app(scope, receive, send)
 
 
+class _ContentLengthMiddleware:
+    """Synthesize ``content-length`` when API Gateway omits it.
+
+    Real API Gateway proxy events sometimes carry no ``content-length``
+    header at all — e.g. HTTP/2 clients signal end-of-body via the stream's
+    END_STREAM flag instead of a literal header, and API Gateway passes that
+    through unchanged even though ``event["body"]`` is fully populated.
+    ``a2wsgi``'s WSGI bridge (``build_environ``) only sets ``CONTENT_LENGTH``
+    from that header; when it's missing, Werkzeug's WSGI-spec-compliant form
+    parser treats the body as zero-length and silently drops POST fields —
+    surfacing as an "Invalid username or password" on the login form with no
+    error anywhere. Mangum always delivers the whole Lambda-event body in one
+    ``receive()`` message (never truly streamed), so it's safe to read it
+    once here, measure it, and replay the identical message downstream with
+    an accurate header attached.
+    """
+
+    def __init__(self, app: Any) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
+        if scope.get("type") != "http" or scope.get("method", "GET") == "GET":
+            await self.app(scope, receive, send)
+            return
+
+        headers = scope.get("headers") or []
+        if any(key == b"content-length" for key, _value in headers):
+            await self.app(scope, receive, send)
+            return
+
+        message = await receive()
+        body = message.get("body") or b""
+        more_body = message.get("more_body", False)
+
+        new_headers = [(k, v) for k, v in headers if k != b"content-length"]
+        new_headers.append((b"content-length", str(len(body)).encode("latin-1")))
+        scope = dict(scope)
+        scope["headers"] = new_headers
+
+        replayed = False
+
+        async def _receive() -> Any:
+            nonlocal replayed
+            if not replayed:
+                replayed = True
+                return {"type": "http.request", "body": body, "more_body": more_body}
+            return await receive()
+
+        await self.app(scope, _receive, send)
+
+
 def _host_is_execute_api(headers: list[tuple[bytes, bytes]]) -> bool:
     for key, value in headers:
         if key == b"host":
@@ -136,6 +187,7 @@ def create_asgi_app(
     app = FastAPI(title=f"{BRAND_NAME} portal", docs_url=None, redoc_url=None, openapi_url=None)
     app.add_middleware(_StagePrefixMiddleware)
     app.add_middleware(_ConfigRefreshMiddleware)
+    app.add_middleware(_ContentLengthMiddleware)
     app.state.company = company
     app.state.environment = environment
 

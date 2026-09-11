@@ -419,6 +419,33 @@ def reject_job(
     return _reject(job_id, reason=reason, username=username)
 
 
+def reject_all_jobs(
+    settings: DnaSettings,
+    *,
+    username: str = "",
+) -> int:
+    """Discard every workbook still in proposal review.
+
+    Approved/catalogued tables are untouched — ``reject_job`` only discards
+    non-approved table proposals and marks the job itself discarded. Returns the
+    number of workbooks removed from review.
+    """
+    from hiveflow.spreadsheet.jobs import reject_job as _reject
+
+    _configure_jobs_env(settings)
+    removed = 0
+    for job in list_proposal_jobs(settings):
+        job_id = str(job.get("job_id") or "").strip()
+        if not job_id:
+            continue
+        try:
+            _reject(job_id, username=username)
+        except ValueError:
+            continue
+        removed += 1
+    return removed
+
+
 def list_catalog_entries(settings: DnaSettings, *, limit: int = 100) -> list[dict[str, Any]]:
     from hiveflow.spreadsheet.jobs import list_catalog_entries as _list
 

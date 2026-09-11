@@ -720,6 +720,55 @@ def test_proposals_keep_prior_uploads_and_navigate_files() -> None:
     assert "aria-label=\"Proposed tables\"" in html
 
 
+def test_file_pager_has_per_chip_reject_and_reject_all_for_admin() -> None:
+    from hiveflow.dna.web.portal.spreadsheet_engine.render import render_spreadsheet_engine_page
+
+    proposal_jobs = [
+        {"job_id": f"job-{i}", "status": "ready", "filename": "sample.xlsx"}
+        for i in range(3)
+    ]
+    html = render_spreadsheet_engine_page(
+        url=lambda path: path,
+        sources=["sse"],
+        active_source="sse",
+        availability={"sse": True},
+        is_admin=True,
+        job=proposal_jobs[0],
+        report={"tables": []},
+        active_tab="review",
+        proposal_jobs=proposal_jobs,
+    )
+    # A per-chip reject form for every workbook, not just the selected one.
+    assert html.count('class="spreadsheet-file-chip-reject"') == 3
+    for job in proposal_jobs:
+        assert f'name="job_id" value="{job["job_id"]}"' in html
+    # One bulk action.
+    assert 'name="action" value="reject_all_jobs"' in html
+    assert "Reject all files" in html
+
+
+def test_file_pager_hides_reject_controls_for_non_admin() -> None:
+    from hiveflow.dna.web.portal.spreadsheet_engine.render import render_spreadsheet_engine_page
+
+    proposal_jobs = [
+        {"job_id": "job-0", "status": "ready", "filename": "sample.xlsx"},
+        {"job_id": "job-1", "status": "ready", "filename": "sample.xlsx"},
+    ]
+    html = render_spreadsheet_engine_page(
+        url=lambda path: path,
+        sources=["sse"],
+        active_source="sse",
+        availability={"sse": True},
+        is_admin=False,
+        job=proposal_jobs[0],
+        report={"tables": []},
+        active_tab="review",
+        proposal_jobs=proposal_jobs,
+    )
+    assert "spreadsheet-file-chip-reject" not in html
+    assert "reject_all_jobs" not in html
+
+
 def test_in_progress_job_renders_on_review_tab() -> None:
     from hiveflow.dna.web.portal.spreadsheet_engine.render import render_spreadsheet_engine_page
 

@@ -983,6 +983,7 @@ def _file_pager_html(
     active_job_id: str,
     url: Callable[[str], str],
     source: str,
+    is_admin: bool = False,
 ) -> str:
     if not jobs:
         return ""
@@ -994,6 +995,7 @@ def _file_pager_html(
         chips.append(
             {
                 "active": job_id == active_job_id,
+                "job_id": job_id,
                 "href": _proposal_url(url, source=source, job_id=job_id, table_index=0),
                 "name": str(job.get("filename") or job_id or "workbook"),
                 "badge": _job_status_short(job),
@@ -1001,10 +1003,11 @@ def _file_pager_html(
             }
         )
     return render_template(
-        "portal/spreadsheet_engine/_source_chip_nav.html",
+        "portal/spreadsheet_engine/_file_chip_nav.html",
         chips=chips,
         nav_class="source-docs-source-nav spreadsheet-file-nav",
         aria_label="Uploaded workbooks",
+        is_admin=is_admin,
     )
 
 
@@ -1841,6 +1844,7 @@ def render_spreadsheet_engine_page(
             active_job_id=job_id,
             url=url,
             source=source,
+            is_admin=is_admin,
         )
     if job:
         body += _file_summary_html(

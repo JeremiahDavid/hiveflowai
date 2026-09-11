@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from dataclasses import dataclass
 from typing import Any, Literal
@@ -13,6 +14,8 @@ from hiveflow.dna.web.cognito_core import (
     cognito_client as _cognito_client,
 )
 from hiveflow.dna.web.portal.auth import PortalUser
+
+logger = logging.getLogger("hiveflow.portal.cognito")
 
 CLIENT_ID_ATTRIBUTE = "custom:client_id"
 ROLE_ATTRIBUTE = "custom:portal_role"
@@ -309,10 +312,20 @@ def authenticate_with_cognito(
 ) -> PortalLoginResult | None:
     config = load_cognito_config(company=company, environment=environment)
     if config is None:
+        logger.warning(
+            "cognito_auth_abort reason=no_config pool_id_set=%s client_id_set=%s",
+            bool(os.getenv("HIVEFLOW_COGNITO_USER_POOL_ID", "").strip()),
+            bool(os.getenv("HIVEFLOW_COGNITO_CLIENT_ID", "").strip()),
+        )
         return None
 
     normalized = username.strip()
     if not normalized or not password:
+        logger.warning(
+            "cognito_auth_abort reason=empty_field username_len=%d password_len=%d",
+            len(normalized),
+            len(password),
+        )
         return None
 
     client = _cognito_client(config.region)
@@ -326,21 +339,44 @@ def authenticate_with_cognito(
                 "PASSWORD": password,
             },
         )
-    except client.exceptions.NotAuthorizedException:
+    except client.exceptions.NotAuthorizedException as exc:
+        logger.warning(
+            "cognito_auth_failed reason=not_authorized username=%r pool=%s client=%s detail=%s",
+            normalized,
+            config.user_pool_id,
+            config.client_id,
+            exc,
+        )
         return None
-    except client.exceptions.UserNotFoundException:
+    except client.exceptions.UserNotFoundException as exc:
+        logger.warning(
+            "cognito_auth_failed reason=user_not_found username=%r pool=%s detail=%s",
+            normalized,
+            config.user_pool_id,
+            exc,
+        )
         return None
+    except Exception:  # noqa: BLE001 — log full context before it becomes a 500
+        logger.exception(
+            "cognito_auth_unexpected_error username=%r pool=%s client=%s",
+            normalized,
+            config.user_pool_id,
+            config.client_id,
+        )
+        raise
 
     challenge = auth_response.get("ChallengeName")
     if challenge == NEW_PASSWORD_CHALLENGE:
         session = str(auth_response.get("Session", "")).strip()
         if not session:
+            logger.warning("cognito_auth_abort reason=new_password_no_session username=%r", normalized)
             return None
         return PortalLoginResult(
             kind="new_password",
             challenge=NewPasswordChallenge(username=normalized, session=session),
         )
     if challenge:
+        logger.warning("cognito_auth_abort reason=unhandled_challenge challenge=%s username=%r", challenge, normalized)
         return None
 
     user = _portal_user_from_username(client, config=config, username=normalized)
