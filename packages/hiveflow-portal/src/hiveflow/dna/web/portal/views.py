@@ -1802,6 +1802,12 @@ def render_spreadsheet_engine(
                 job_id=catalog_job_id,
                 table_id=catalog_table_id,
             )
+    table_progress: list[dict[str, Any]] = []
+    if str((job or {}).get("status") or "") == "proposing":
+        from hiveflow.dna.web.portal.spreadsheet_engine.service import proposal_table_progress
+
+        table_progress = proposal_table_progress(settings, job_id=job_id_for_preview)
+
     body = page_header(
         "Spreadsheet Engine",
         "Upload Excel workbooks, profile candidate tables, and approve proposed schemas.",
@@ -1828,6 +1834,7 @@ def render_spreadsheet_engine(
         transform_preview=transform_preview,
         prefill_catalog_id=prefill_catalog_id,
         proposal_jobs=proposal_jobs,
+        table_progress=table_progress,
     )
     return _html_response(
         request,

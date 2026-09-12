@@ -59,33 +59,91 @@ class ParseSession:
         )
 
 
-def build_tool_server(session: ParseSession) -> Any:
+def list_sheets_data(session: ParseSession) -> dict[str, Any]:
+    """Every sheet's size and the detector's candidate regions."""
     wb = session.workbook
+    out = []
+    for grid in wb.sheets:
+        ov = overview(grid)
+        out.append(
+            {
+                "sheet": grid.name,
+                "rows": grid.nrows,
+                "cols": grid.ncols,
+                "density": round(ov.density, 2),
+                "merged_ranges": len(grid.merged_ranges),
+                "candidates": [
+                    {
+                        "a1_range": r.a1_range,
+                        "kind": r.kind,
+                        "confidence": r.confidence,
+                        "header_rows": r.header_rows,
+                    }
+                    for r in session.detected.get(grid.name, [])
+                ],
+            }
+        )
+    return {"sheets": out}
 
+
+def get_sheet_map_data(session: ParseSession, sheet: str) -> dict[str, Any]:
+    """ASCII layout map, merged ranges, and detailed detector candidates for one sheet.
+
+    Raises ``KeyError`` when ``sheet`` doesn't exist.
+    """
+    wb = session.workbook
+    grid = wb.sheet(sheet)
+    ov = overview(grid)
+    merged = [grid.range_a1(*m) for m in grid.merged_ranges]
+    cands = [
+        {
+            "a1_range": r.a1_range,
+            "kind": r.kind,
+            "confidence": r.confidence,
+            "header_rows": r.header_rows,
+            "signals": r.signals,
+            "features": r.features,
+        }
+        for r in session.detected.get(sheet, [])
+    ]
+    return {
+        "sheet": sheet,
+        "shape_map": ov.shape_map,
+        "legend": "' '=empty  '.'/':'/'#'=increasing fill; each char is one cell",
+        "empty_row_runs": ov.empty_row_runs,
+        "merged_ranges": merged,
+        "candidates": cands,
+    }
+
+
+def read_range_data(
+    session: ParseSession, sheet: str, a1_range: str, max_rows: int = 40
+) -> dict[str, Any]:
+    """Raw cell values for an A1 range (truncated).
+
+    Raises ``KeyError``/``ValueError`` for an unknown sheet or malformed range.
+    """
+    wb = session.workbook
+    grid = wb.sheet(sheet)
+    r0, c0, r1, c1 = parse_a1_range(a1_range)
+    r1 = min(r1, grid.nrows - 1, r0 + max_rows - 1)
+    c1 = min(c1, grid.ncols - 1, c0 + 39)
+    rows = []
+    for r in range(r0, r1 + 1):
+        rows.append(
+            {
+                cell_a1(r, c): _short(grid.cell(r, c).value)
+                for c in range(c0, c1 + 1)
+                if grid.cell(r, c).occupied
+            }
+        )
+    return {"sheet": sheet, "range": grid.range_a1(r0, c0, r1, c1), "rows_by_cell": rows}
+
+
+def build_tool_server(session: ParseSession) -> Any:
     @tool("list_sheets", "List every sheet with its size and the detector's candidate regions.", {})
     async def list_sheets(_args: dict[str, Any]) -> dict[str, Any]:
-        out = []
-        for grid in wb.sheets:
-            ov = overview(grid)
-            out.append(
-                {
-                    "sheet": grid.name,
-                    "rows": grid.nrows,
-                    "cols": grid.ncols,
-                    "density": round(ov.density, 2),
-                    "merged_ranges": len(grid.merged_ranges),
-                    "candidates": [
-                        {
-                            "a1_range": r.a1_range,
-                            "kind": r.kind,
-                            "confidence": r.confidence,
-                            "header_rows": r.header_rows,
-                        }
-                        for r in session.detected.get(grid.name, [])
-                    ],
-                }
-            )
-        return _text({"sheets": out})
+        return _text(list_sheets_data(session))
 
     @tool(
         "get_sheet_map",
@@ -98,34 +156,10 @@ def build_tool_server(session: ParseSession) -> Any:
         },
     )
     async def get_sheet_map(args: dict[str, Any]) -> dict[str, Any]:
-        name = args["sheet"]
         try:
-            grid = wb.sheet(name)
+            return _text(get_sheet_map_data(session, args["sheet"]))
         except KeyError as exc:
             return _err(str(exc))
-        ov = overview(grid)
-        merged = [grid.range_a1(*m) for m in grid.merged_ranges]
-        cands = [
-            {
-                "a1_range": r.a1_range,
-                "kind": r.kind,
-                "confidence": r.confidence,
-                "header_rows": r.header_rows,
-                "signals": r.signals,
-                "features": r.features,
-            }
-            for r in session.detected.get(name, [])
-        ]
-        return _text(
-            {
-                "sheet": name,
-                "shape_map": ov.shape_map,
-                "legend": "' '=empty  '.'/':'/'#'=increasing fill; each char is one cell",
-                "empty_row_runs": ov.empty_row_runs,
-                "merged_ranges": merged,
-                "candidates": cands,
-            }
-        )
 
     @tool(
         "read_range",
@@ -143,25 +177,13 @@ def build_tool_server(session: ParseSession) -> Any:
     )
     async def read_range(args: dict[str, Any]) -> dict[str, Any]:
         try:
-            grid = wb.sheet(args["sheet"])
-            r0, c0, r1, c1 = parse_a1_range(args["a1_range"])
+            return _text(
+                read_range_data(
+                    session, args["sheet"], args["a1_range"], int(args.get("max_rows") or 40)
+                )
+            )
         except (KeyError, ValueError) as exc:
             return _err(str(exc))
-        max_rows = int(args.get("max_rows") or 40)
-        r1 = min(r1, grid.nrows - 1, r0 + max_rows - 1)
-        c1 = min(c1, grid.ncols - 1, c0 + 39)
-        rows = []
-        for r in range(r0, r1 + 1):
-            rows.append(
-                {
-                    cell_a1(r, c): _short(grid.cell(r, c).value)
-                    for c in range(c0, c1 + 1)
-                    if grid.cell(r, c).occupied
-                }
-            )
-        return _text(
-            {"sheet": args["sheet"], "range": grid.range_a1(r0, c0, r1, c1), "rows_by_cell": rows}
-        )
 
     @tool(
         "profile_region",
@@ -197,7 +219,7 @@ def build_tool_server(session: ParseSession) -> Any:
     )
     async def profile_region(args: dict[str, Any]) -> dict[str, Any]:
         try:
-            grid = wb.sheet(args["sheet"])
+            grid = session.workbook.sheet(args["sheet"])
         except KeyError as exc:
             return _err(str(exc))
         try:

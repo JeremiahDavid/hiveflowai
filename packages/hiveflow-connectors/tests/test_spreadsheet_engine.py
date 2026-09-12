@@ -1230,6 +1230,92 @@ def test_approve_clean_shape_synthesizes_transform(tmp_path: Path, monkeypatch: 
     assert after["transformation_status"] == "pending_review"
 
 
+def test_propose_map_fanout_matches_sequential_result(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """run_propose_prepare/table/finalize (Step Functions Map fan-out) must agree
+    with the sequential run_propose path for the same workbook."""
+    monkeypatch.setenv("HIVEFLOW_DATA_DIR", str(tmp_path))
+    monkeypatch.delenv("HIVEFLOW_S3_BUCKET", raising=False)
+
+    from hiveflow.spreadsheet.jobs import (
+        _read_json,
+        _write_json,
+        create_job,
+        load_job,
+        load_report,
+        run_parse,
+        run_profile,
+        run_propose_finalize,
+        run_propose_prepare,
+        run_propose_table,
+        store_upload,
+    )
+    from hiveflow.spreadsheet.propose import propose_transforms
+    from hiveflow.storage.paths import (
+        spreadsheet_engine_job_parse_key,
+        spreadsheet_engine_job_profile_key,
+        spreadsheet_engine_job_report_key,
+    )
+
+    def build_two_table_workbook(path: Path) -> None:
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Customers"
+        ws.append(["Customer ID", "Company"])
+        ws.append(["C1", "Acme"])
+        ws.append(["C2", "Beta"])
+        ws2 = wb.create_sheet("Vendors")
+        ws2.append(["Vendor ID", "Name"])
+        ws2.append(["V1", "Globex"])
+        ws2.append(["V2", "Initech"])
+        wb.save(path)
+
+    def seed_job(filename: str) -> tuple[str, dict, dict]:
+        path = tmp_path / filename
+        build_two_table_workbook(path)
+        job = create_job(filename=filename, username="poc")
+        store_upload(job["job_id"], filename=filename, body=path.read_bytes())
+        run_parse(job["job_id"])
+        run_profile(job["job_id"])
+        parse_payload = _read_json(spreadsheet_engine_job_parse_key(job["job_id"]))
+        profile_payload = _read_json(spreadsheet_engine_job_profile_key(job["job_id"]))
+        report = interpret_tables(parse_payload, profile_payload, invoke=False)
+        report["job_id"] = job["job_id"]
+        _write_json(spreadsheet_engine_job_report_key(job["job_id"]), report)
+        return job["job_id"], parse_payload, profile_payload
+
+    # Sequential path (what the local/dev synchronous pipeline produces),
+    # invoked with invoke=False like every other AI-touching test here.
+    sequential_job_id, sequential_parse, sequential_profile = seed_job("sequential.xlsx")
+    sequential_report = interpret_tables(sequential_parse, sequential_profile, invoke=False)
+    sequential_report = propose_transforms(
+        sequential_parse, sequential_profile, sequential_report, invoke=False
+    )
+
+    # Map-state (deployed pipeline) path: prepare -> one run_propose_table per
+    # table_id, in any order -> finalize.
+    fanout_job_id, _fanout_parse, _fanout_profile = seed_job("fanout.xlsx")
+    prepared = run_propose_prepare(fanout_job_id)
+    assert prepared["reload"] is False
+    assert sorted(prepared["table_ids"]) == ["t0", "t1"]
+    assert load_job(fanout_job_id)["status"] == "proposing"
+
+    for table_id in reversed(prepared["table_ids"]):  # order shouldn't matter
+        run_propose_table(fanout_job_id, table_id, invoke=False)
+
+    finalized_job = run_propose_finalize(fanout_job_id)
+    assert finalized_job["status"] == "ready"
+    assert finalized_job["table_count"] == 2
+    fanout_report = load_report(fanout_job_id)
+
+    assert [t["table_id"] for t in fanout_report["tables"]] == [
+        t["table_id"] for t in sequential_report["tables"]
+    ]
+    for seq_table, fanout_table in zip(sequential_report["tables"], fanout_report["tables"]):
+        assert fanout_table["clean_goal"]["headers"] == seq_table["clean_goal"]["headers"]
+        assert fanout_table["clean_shape_status"] == seq_table["clean_shape_status"]
+        assert fanout_table["transformation_status"] == seq_table["transformation_status"]
+
+
 def test_induce_falls_back_when_oracle_is_identity(tmp_path: Path) -> None:
     """Bedrock sometimes echoes the ragged input; prefer the group_rows heuristic clean goal."""
     import json

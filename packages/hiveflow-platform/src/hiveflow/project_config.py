@@ -938,7 +938,18 @@ def glue_database_name(
         environment,
         path=path,
     )
-    return f"hiveflow_{selected_company}_{selected_environment}".lower()
+    config = load_project_config(path)
+    secrets_cfg = config.get("secrets", {})
+    if not isinstance(secrets_cfg, dict):
+        secrets_cfg = {}
+
+    template = str(
+        secrets_cfg.get("glue_database_name_template", "hiveflow_{company}_{environment}")
+    ).strip()
+    return template.format(
+        company=selected_company,
+        environment=selected_environment,
+    ).lower()
 
 
 def athena_workgroup_name(

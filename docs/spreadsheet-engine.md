@@ -113,7 +113,9 @@ flowchart TB
     L1[parse_handler]
     L2[profile_handler]
     L3[interpret_handler]
-    L4[propose_handler]
+    L4P[propose_prepare_handler]
+    L4[propose_table_handler ×N, parallel Map]
+    L4F[propose_finalize_handler]
     BR[Bedrock Runtime]
   end
 
@@ -136,8 +138,8 @@ flowchart TB
   UI --> SVC
   SVC --> JOBS
   SVC --> SFN
-  SFN --> L1 --> L2 --> L3 --> L4
-  L1 & L2 & L3 & L4 --> JOBS
+  SFN --> L1 --> L2 --> L3 --> L4P --> L4 --> L4F
+  L1 & L2 & L3 & L4P & L4 & L4F --> JOBS
   JOBS --> PARSER & PROF & INTERP & PROP
   INTERP & PROP --> BR
   PROP --> XFORM
@@ -186,13 +188,21 @@ Output: `spreadsheet_engine_parse` JSON with `tables[]` — each table has `tabl
 
 ### Interpret (`interpret.py`)
 
-`interpret_tables(parse, profile)` calls Bedrock (Claude Haiku by default) with profiling stats and sample rows. Returns entity proposals: `entity_name`, `purpose`, `grain`, `confidence`, `schema`, `relationships`.
+`interpret_tables(parse, profile, workbook_path=...)` tries three tiers, each falling back to the next on failure:
 
-When Bedrock is unavailable or returns invalid JSON, a **heuristic fallback** derives entity name from the sheet title and schema from profiler output (`invoke=False` in tests skips the API call entirely).
+1. **Agent pass (`_agent_interpret`)** — when a `workbook_path` is given, a tool-capable loop driven directly by `bedrock-runtime.converse`'s native `toolConfig` (`_agent_runtime.run_bedrock_tool_agent` — plain boto3, no Node/CLI) lets the model inspect the real workbook (`list_sheets`, `get_sheet_map`, `read_range`) before calling `record_interpretation` once per table and `finish`. This replaced an earlier Claude-Agent-SDK/`claude`-CLI version of the same tools: that path was silently failing on every real invocation (Bedrock's own model-invocation logs showed a session-startup probe, an unused session-title call, then a multi-minute silent hang before falling back anyway) — porting the same tool bodies onto Bedrock's own tool-use protocol keeps the capability without the CLI subprocess to hang.
+2. **Single-shot (`_default_invoke`)** — calls Bedrock (Claude Haiku by default) once with profiling stats and sample rows, no tools. Used when there's no `workbook_path`, or the agent pass raises.
+3. **Heuristic fallback** — derives entity name from the sheet title and schema from profiler output when Bedrock is unavailable or returns invalid JSON (`invoke=False` in tests skips the API call entirely).
+
+All three tiers return entity proposals with the same shape: `entity_name`, `purpose`, `grain`, `confidence`, `schema`, `relationships`.
 
 ### Propose (`propose.py`, `synthesize.py`, `sample.py`)
 
-`propose_transforms(...)` attaches a **cleaned data goal** to each interpreted table for operator review. Transform steps are synthesized **after** the cleaned shape is approved.
+`propose_transform_for_table(...)` attaches a **cleaned data goal** to one interpreted table for operator review; `propose_transforms(...)`/`propose_transforms_for_report(...)` loop that sequentially over every table for the local/dev pipeline. Transform steps are synthesized **after** the cleaned shape is approved.
+
+The deployed pipeline does **not** run tables sequentially in one Lambda — a table's AI call can take real time, and running every table in one 900s Lambda invocation would time out on any workbook with more than a handful of tables. Instead a Step Functions **Map state** fans tables out to parallel `propose_table_handler` invocations (`run_propose_table`, `jobs.py`), bookended by `run_propose_prepare` (flips the job to `proposing`, lists `table_ids`) and `run_propose_finalize` (aggregates each table's S3 output into the final `report.json`, flips the job to `ready`). Per-table branches only ever write their own `governance/spreadsheet_engine/jobs/{job_id}/tables/{table_id}.json` key — never job.json — so concurrent branches can't race on the shared job record. `jobs.propose_table_progress` reads that same per-table state (a table's JSON exists from the interpret stage already, so "has `clean_goal`" — not existence — is the ready signal) to give the portal UI a live per-table checklist instead of one job-wide spinner.
+
+Despite running on the interpret/propose **container-image** Lambdas (Node + the `claude` CLI, `HIVEFLOW_AGENT_RUNTIME=sdk`), the propose stage's oracle-clean and transform-synthesis calls (`synthesize.py`, via `_agent_runtime.text_invoke`) always go straight to a plain single-shot `converse` call — confirmed via Bedrock's own model-invocation logs that routing a single-shot, no-tools call through the Agent SDK still pays for a full Claude Code CLI session (model-availability probes + an unused "name this session" call) before an internal failure fell back to `converse` anyway. `text_invoke` skips straight there now, so a table's real cost is one Bedrock call, not one CLI session plus a fallback.
 
 1. **AI clean (oracle)** — sample rows are cleaned into `clean_goal` (`headers`, `rows`, `grain`) with `clean_shape_status=pending_review`.
 2. **Operator review** — approve the cleaned preview, or reject with feedback to re-clean.
@@ -339,10 +349,12 @@ Use `hiveflow.spreadsheet.handlers.pipeline_handler` as a single Lambda entry po
 | Parse Lambda | `hiveflow.spreadsheet.handlers.parse_handler` |
 | Profile Lambda | `hiveflow.spreadsheet.handlers.profile_handler` |
 | Interpret Lambda | `hiveflow.spreadsheet.handlers.interpret_handler` |
-| Propose Lambda | `hiveflow.spreadsheet.handlers.propose_handler` |
+| Propose-prepare Lambda | `hiveflow.spreadsheet.handlers.propose_prepare_handler` (plain zip — no Bedrock) |
+| Propose-table Lambda | `hiveflow.spreadsheet.handlers.propose_table_handler` (Agent SDK container image; one invocation per table, fanned out by the Map state below) |
+| Propose-finalize Lambda | `hiveflow.spreadsheet.handlers.propose_finalize_handler` (plain zip — no Bedrock) |
 | State machine | `{company}-{env}-all-spreadsheet_analyze` |
 
-Chain: **Parse → Profile → Interpret → Propose**. Interpret and propose Lambdas need Bedrock invoke permissions. All Lambdas read/write the data bucket.
+Chain: **Parse → Profile → Interpret → Propose-prepare → Map(Propose-table, max concurrency 4) → Propose-finalize**. Interpret and propose-table Lambdas need Bedrock invoke permissions. All Lambdas read/write the data bucket.
 
 ---
 

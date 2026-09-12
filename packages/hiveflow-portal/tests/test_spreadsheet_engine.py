@@ -844,6 +844,42 @@ def test_job_status_includes_pipeline_payload(tmp_path: Path, monkeypatch: pytes
     assert payload["pipeline"]["stages"][2]["state"] == "active"
 
 
+def test_job_status_reports_per_table_progress_while_proposing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """While the Map state's branches are still running, job_status() should
+    expose per-table ready/pending progress instead of one job-wide spinner."""
+    monkeypatch.setenv("HIVEFLOW_DATA_DIR", str(tmp_path))
+    monkeypatch.delenv("HIVEFLOW_S3_BUCKET", raising=False)
+
+    from hiveflow.dna.settings import DnaSettings
+    from hiveflow.dna.web.portal.spreadsheet_engine.service import job_status
+    from hiveflow.spreadsheet.jobs import _write_json, create_job, save_job
+    from hiveflow.storage.paths import spreadsheet_engine_job_table_key
+
+    job = create_job(filename="sample.xlsx", username="poc")
+    job_id = job["job_id"]
+    save_job({**job, "status": "proposing", "table_ids": ["t0", "t1", "t2"]})
+
+    # t0: interpreted but not yet proposed (no clean_goal) — still pending.
+    _write_json(spreadsheet_engine_job_table_key(job_id, "t0"), {"table_id": "t0", "entity_name": "customers"})
+    # t1: proposed — ready.
+    _write_json(
+        spreadsheet_engine_job_table_key(job_id, "t1"),
+        {"table_id": "t1", "entity_name": "vendors", "clean_goal": {"headers": ["a"], "rows": []}},
+    )
+    # t2: never written by interpret/propose — still pending.
+
+    settings = DnaSettings(source="dbc", data_dir=tmp_path, company="poc")
+    payload = job_status(settings, job_id=job_id, company="poc", environment="dev")
+
+    progress = {item["table_id"]: item for item in payload["table_progress"]}
+    assert progress["t0"]["status"] == "pending"
+    assert progress["t1"]["status"] == "ready"
+    assert progress["t1"]["entity_name"] == "vendors"
+    assert progress["t2"]["status"] == "pending"
+
+
 def test_upload_redirects_to_review_tab(tmp_path: Path, portal_env: None, monkeypatch: pytest.MonkeyPatch) -> None:
     from io import BytesIO
 

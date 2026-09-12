@@ -1,10 +1,11 @@
 """Bedrock semantic interpretation of profiled spreadsheet tables.
 
-The default path runs a tool-capable Claude Agent SDK session (``_agent_interpret``)
-that inspects the actual workbook before proposing an entity name / grain / schema
-per table. When the Agent SDK runtime is unavailable (no Node / not a container
-Lambda) it falls back to the original single-shot ``converse`` call, and when that
-also fails every table gets ``_heuristic_table``. The output dict shape is
+The default path runs a tool-capable pass (``_agent_interpret``) over a native
+Bedrock ``converse`` tool loop (see ``_agent_runtime.run_bedrock_tool_agent``)
+that inspects the actual workbook before proposing an entity name / grain /
+schema per table. When no workbook path is given, or that pass raises, it
+falls back to the original single-shot ``converse`` call, and when that also
+fails every table gets ``_heuristic_table``. The output dict shape is
 identical in all three cases.
 """
 
@@ -17,7 +18,7 @@ from typing import Any, Callable
 
 from botocore.config import Config
 
-from hiveflow.spreadsheet._agent_runtime import agent_available, run_tool_agent
+from hiveflow.spreadsheet._agent_runtime import BedrockTool, run_bedrock_tool_agent
 
 INTERPRET_KIND = "spreadsheet_engine_report"
 DEFAULT_BEDROCK_MODEL_ID = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
@@ -148,49 +149,30 @@ def _agent_interpret(
     model: str | None,
     max_budget_usd: float | None,
 ) -> tuple[dict[str, dict[str, Any]], float | None]:
-    """Tool-capable Agent SDK pass. Returns ``({table_id: proposal}, cost_usd)``."""
-    from claude_agent_sdk import create_sdk_mcp_server, tool
+    """Tool-capable pass over the real workbook via a native Bedrock tool loop.
 
-    from hiveflow_core import json_default, mcp_tool_name
+    No Node, no ``claude`` CLI — see ``_agent_runtime.run_bedrock_tool_agent``.
+    Returns ``({table_id: proposal}, cost_usd)``; ``max_budget_usd`` is accepted
+    for interface parity but unused — the native loop has no CLI subprocess to
+    hang, so ``max_turns`` alone bounds cost.
+    """
+    del max_budget_usd
     from hiveflow_spreadsheet_parser.readers import read_workbook
-    from hiveflow_spreadsheet_parser.tools import ParseSession, build_tool_server
+    from hiveflow_spreadsheet_parser.tools import (
+        ParseSession,
+        get_sheet_map_data,
+        list_sheets_data,
+        read_range_data,
+    )
 
-    wb = read_workbook(workbook_path)
-    session = ParseSession(workbook=wb)
-    sheets_server = build_tool_server(session)
-
+    session = ParseSession(workbook=read_workbook(workbook_path))
     recorded: dict[str, dict[str, Any]] = {}
     valid_ids = {str(t.get("table_id")) for t in user_payload.get("tables") or []}
 
-    def _ok(payload: Any) -> dict[str, Any]:
-        return {"content": [{"type": "text", "text": json.dumps(payload, default=json_default)}]}
-
-    @tool(
-        "record_interpretation",
-        "Record the semantic proposal for one table_id.",
-        {
-            "type": "object",
-            "properties": {
-                "table_id": {"type": "string"},
-                "entity_name": {"type": "string"},
-                "purpose": {"type": "string"},
-                "grain": {"type": "string"},
-                "confidence": {"type": "number"},
-                "schema": {"type": "array", "items": {"type": "object"}},
-                "relationships": {"type": "array", "items": {"type": "object"}},
-                "notes": {"type": "array", "items": {"type": "string"}},
-            },
-            "required": ["table_id", "entity_name", "grain", "schema"],
-            "additionalProperties": True,
-        },
-    )
-    async def record_interpretation(args: dict[str, Any]) -> dict[str, Any]:
+    def _record_interpretation(args: dict[str, Any]) -> Any:
         tid = str(args.get("table_id") or "")
         if tid not in valid_ids:
-            return {
-                "content": [{"type": "text", "text": f"Error: unknown table_id {tid!r}"}],
-                "is_error": True,
-            }
+            raise ValueError(f"Unknown table_id {tid!r}")
         recorded[tid] = {
             "table_id": tid,
             "entity_name": args.get("entity_name"),
@@ -201,30 +183,72 @@ def _agent_interpret(
             "relationships": args.get("relationships") or [],
             "notes": args.get("notes") or [],
         }
-        return _ok({"recorded": tid, "remaining": sorted(valid_ids - set(recorded))})
+        return {"recorded": tid, "remaining": sorted(valid_ids - set(recorded))}
 
-    @tool("finish", "Call once every table_id has a recorded interpretation.", {})
-    async def finish(_args: dict[str, Any]) -> dict[str, Any]:
-        return _ok({"recorded": sorted(recorded), "missing": sorted(valid_ids - set(recorded))})
+    def _finish(_args: dict[str, Any]) -> Any:
+        return {"recorded": sorted(recorded), "missing": sorted(valid_ids - set(recorded))}
 
-    interpret_server = create_sdk_mcp_server(
-        name="interpret", version="0.1.0", tools=[record_interpretation, finish]
-    )
-    allowed = [
-        mcp_tool_name("sheets", "list_sheets"),
-        mcp_tool_name("sheets", "get_sheet_map"),
-        mcp_tool_name("sheets", "read_range"),
-        mcp_tool_name("interpret", "record_interpretation"),
-        mcp_tool_name("interpret", "finish"),
+    tools = [
+        BedrockTool(
+            "list_sheets",
+            "List every sheet with its size and the detector's candidate regions.",
+            {"type": "object", "properties": {}},
+            lambda _args: list_sheets_data(session),
+        ),
+        BedrockTool(
+            "get_sheet_map",
+            "ASCII layout map, merged ranges, and detailed detector candidates for one sheet.",
+            {
+                "type": "object",
+                "properties": {"sheet": {"type": "string"}},
+                "required": ["sheet"],
+            },
+            lambda args: get_sheet_map_data(session, args["sheet"]),
+        ),
+        BedrockTool(
+            "read_range",
+            "Raw cell values for an A1 range (truncated). Use to verify extent and headers.",
+            {
+                "type": "object",
+                "properties": {
+                    "sheet": {"type": "string"},
+                    "a1_range": {"type": "string"},
+                    "max_rows": {"type": "integer"},
+                },
+                "required": ["sheet", "a1_range"],
+            },
+            lambda args: read_range_data(
+                session, args["sheet"], args["a1_range"], int(args.get("max_rows") or 40)
+            ),
+        ),
+        BedrockTool(
+            "record_interpretation",
+            "Record the semantic proposal for one table_id.",
+            {
+                "type": "object",
+                "properties": {
+                    "table_id": {"type": "string"},
+                    "entity_name": {"type": "string"},
+                    "purpose": {"type": "string"},
+                    "grain": {"type": "string"},
+                    "confidence": {"type": "number"},
+                    "schema": {"type": "array", "items": {"type": "object"}},
+                    "relationships": {"type": "array", "items": {"type": "object"}},
+                    "notes": {"type": "array", "items": {"type": "string"}},
+                },
+                "required": ["table_id", "entity_name", "grain", "schema"],
+            },
+            _record_interpretation,
+        ),
+        BedrockTool("finish", "Call once every table_id has a recorded interpretation.", {}, _finish),
     ]
-    outcome = run_tool_agent(
+    outcome = run_bedrock_tool_agent(
         _AGENT_SYSTEM,
         json.dumps(user_payload, default=str),
-        mcp_servers={"sheets": sheets_server, "interpret": interpret_server},
-        allowed_tools=allowed,
+        tools=tools,
         max_turns=8 + 4 * len(valid_ids),
-        max_budget_usd=max_budget_usd,
         model=model,
+        stop_tool_names=frozenset({"finish"}),
     )
     return recorded, outcome.cost_usd
 
@@ -240,8 +264,10 @@ def interpret_tables(
 ) -> dict[str, Any]:
     """Produce semantic proposals for each profiled table.
 
-    ``workbook_path`` enables the tool-capable agent pass when the Agent SDK
-    runtime is active. ``invoke`` keeps its original tri-state contract
+    ``workbook_path`` enables the tool-capable agent pass (a native Bedrock
+    tool loop — see ``_agent_interpret``); it needs nothing beyond boto3, so
+    it's attempted anywhere a workbook path is available, not just on a
+    special container Lambda. ``invoke`` keeps its original tri-state contract
     (``None`` = real Bedrock, callable = custom transport, ``False`` = skip the
     model entirely) so existing callers and tests are unaffected.
     """
@@ -271,7 +297,7 @@ def interpret_tables(
     interpreted: list[dict[str, Any]] = []
     llm_tables: dict[str, dict[str, Any]] = {}
 
-    if invoke is None and workbook_path and agent_available():
+    if invoke is None and workbook_path:
         try:
             llm_tables, _cost = _agent_interpret(
                 user_payload, workbook_path, model=model, max_budget_usd=max_budget_usd

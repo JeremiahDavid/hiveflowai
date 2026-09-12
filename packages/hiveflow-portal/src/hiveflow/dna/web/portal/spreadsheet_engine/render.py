@@ -1436,11 +1436,43 @@ def _sheet_selection_html(
     )
 
 
+def _table_progress_item_html(item: dict[str, Any]) -> str:
+    table_id = str(item.get("table_id") or "")
+    status = str(item.get("status") or "pending")
+    entity_name = str(item.get("entity_name") or "").strip()
+    label = entity_name or table_id or "table"
+    icon = "✓" if status == "ready" else "⋯"
+    return (
+        f'<li class="spreadsheet-table-progress-item is-{escape(status)}" '
+        f'id="spreadsheet-table-progress-{escape(table_id)}" data-table-id="{escape(table_id)}" '
+        f'data-status="{escape(status)}">'
+        f'<span class="spreadsheet-table-progress-icon" aria-hidden="true">{icon}</span>'
+        f'<span class="spreadsheet-table-progress-label">{escape(label)}</span>'
+        "</li>"
+    )
+
+
+def _table_progress_list_html(table_progress: list[dict[str, Any]]) -> str:
+    if not table_progress:
+        return ""
+    ready_count = sum(1 for item in table_progress if str(item.get("status")) == "ready")
+    items = "".join(_table_progress_item_html(item) for item in table_progress)
+    return f"""
+      <div class="spreadsheet-table-progress" id="spreadsheet-table-progress">
+        <p class="muted spreadsheet-table-progress-count" id="spreadsheet-table-progress-count">
+          {ready_count} of {len(table_progress)} tables ready
+        </p>
+        <ul class="spreadsheet-table-progress-list" id="spreadsheet-table-progress-list">{items}</ul>
+      </div>
+    """
+
+
 def _proposal_generation_status_html(
     *,
     filename: str,
     pipeline: dict[str, Any],
     job_id: str,
+    table_progress: list[dict[str, Any]] | None = None,
 ) -> str:
     error = str(pipeline.get("error") or "").strip()
     error_html = ""
@@ -1458,6 +1490,7 @@ def _proposal_generation_status_html(
         </div>
       </div>
       <p class="muted spreadsheet-proposal-status-workbook">Workbook: <strong>{escape(filename or "workbook")}</strong></p>
+      {_table_progress_list_html(table_progress or [])}
       {error_html}
     </section>
     """
@@ -1599,6 +1632,56 @@ def _status_poll_script(status_url: str, job_id: str, *, poll: bool) -> str:
     }}
   }}
 
+  function renderTableProgress(items) {{
+    if (!items || !items.length) return;
+    var list = document.getElementById("spreadsheet-table-progress-list");
+    var count = document.getElementById("spreadsheet-table-progress-count");
+    if (!list) {{
+      var container = document.createElement("div");
+      container.className = "spreadsheet-table-progress";
+      container.id = "spreadsheet-table-progress";
+      count = document.createElement("p");
+      count.className = "muted spreadsheet-table-progress-count";
+      count.id = "spreadsheet-table-progress-count";
+      container.appendChild(count);
+      list = document.createElement("ul");
+      list.className = "spreadsheet-table-progress-list";
+      list.id = "spreadsheet-table-progress-list";
+      container.appendChild(list);
+      var errorEl = document.getElementById("spreadsheet-proposal-status-error");
+      if (errorEl) {{
+        statusRoot.insertBefore(container, errorEl);
+      }} else {{
+        statusRoot.appendChild(container);
+      }}
+    }}
+    var readyCount = items.filter(function (item) {{ return item.status === "ready"; }}).length;
+    count.textContent = readyCount + " of " + items.length + " tables ready";
+    items.forEach(function (item) {{
+      var tid = item.table_id || "";
+      if (!tid) return;
+      var li = document.getElementById("spreadsheet-table-progress-" + tid);
+      if (!li) {{
+        li = document.createElement("li");
+        li.id = "spreadsheet-table-progress-" + tid;
+        li.setAttribute("data-table-id", tid);
+        var icon = document.createElement("span");
+        icon.className = "spreadsheet-table-progress-icon";
+        icon.setAttribute("aria-hidden", "true");
+        var label = document.createElement("span");
+        label.className = "spreadsheet-table-progress-label";
+        li.appendChild(icon);
+        li.appendChild(label);
+        list.appendChild(li);
+      }}
+      var status = item.status || "pending";
+      li.className = "spreadsheet-table-progress-item is-" + status;
+      li.setAttribute("data-status", status);
+      li.querySelector(".spreadsheet-table-progress-icon").textContent = status === "ready" ? "✓" : "⋯";
+      li.querySelector(".spreadsheet-table-progress-label").textContent = item.entity_name || tid;
+    }});
+  }}
+
   function tableCount(payload) {{
     if (payload.report && payload.report.tables && payload.report.tables.length) {{
       return payload.report.tables.length;
@@ -1616,6 +1699,7 @@ def _status_poll_script(status_url: str, job_id: str, *, poll: bool) -> str:
       return true;
     }}
     if (payload.pipeline) renderPipeline(payload.pipeline);
+    if (payload.table_progress) renderTableProgress(payload.table_progress);
     var status = payload.status || "";
     var tablesReady = tableCount(payload) > 0 && (status === "ready" || status === "error");
     if (!tablesReady && tableCount(payload) > 0 && payload.report && payload.report.tables) {{
@@ -1671,6 +1755,29 @@ def _status_poll_script(status_url: str, job_id: str, *, poll: bool) -> str:
     }}, 2500);
   }});
 }})();
+</script>
+"""
+
+
+def _upload_submit_guard_script() -> str:
+    return """
+<script>
+(function () {
+  var form = document.querySelector(".spreadsheet-upload-form");
+  if (!form || form.dataset.guardBound === "1") return;
+  form.dataset.guardBound = "1";
+  form.addEventListener("submit", function () {
+    if (form.dataset.submitted === "1") {
+      return;
+    }
+    form.dataset.submitted = "1";
+    var btn = form.querySelector(".portal-submit-btn");
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = "Uploading…";
+    }
+  });
+})();
 </script>
 """
 
@@ -1733,6 +1840,7 @@ def render_spreadsheet_engine_page(
     transform_preview: dict[str, Any] | None = None,
     prefill_catalog_id: str = "",
     proposal_jobs: list[dict[str, Any]] | None = None,
+    table_progress: list[dict[str, Any]] | None = None,
 ) -> str:
     source = normalize_reference_source(active_source) or "sse"
     job_id = str((job or {}).get("job_id") or request_job_id or "")
@@ -1868,6 +1976,7 @@ def render_spreadsheet_engine_page(
             filename=filename,
             pipeline=pipeline,
             job_id=job_id,
+            table_progress=table_progress or [],
         )
     elif has_proposals:
         suggested = list((job or {}).get("suggested_catalog_ids") or [])
@@ -1950,6 +2059,7 @@ def render_spreadsheet_engine_page(
     body += _compose_script()
     body += _scroll_script()
     body += _dropzone_script()
+    body += _upload_submit_guard_script()
     body += _status_poll_script(
         status_url,
         job_id,

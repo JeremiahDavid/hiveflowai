@@ -185,6 +185,15 @@ def load_job_report(settings: DnaSettings, *, job_id: str) -> dict[str, Any] | N
     return load_report(job_id)
 
 
+def proposal_table_progress(settings: DnaSettings, *, job_id: str) -> list[dict[str, Any]]:
+    from hiveflow.spreadsheet.jobs import propose_table_progress
+
+    _configure_jobs_env(settings)
+    if not job_id.strip():
+        return []
+    return propose_table_progress(job_id.strip())
+
+
 def load_table_preview_data(
     settings: DnaSettings,
     *,
@@ -269,10 +278,10 @@ def enqueue_analysis(
 
     payload = {"job_id": job_id}
     if _on_lambda():
-        import boto3
+        from hiveflow.storage.aws import sfn_client
 
         region = os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION") or "us-east-2"
-        client = boto3.client("stepfunctions", region_name=region)
+        client = sfn_client(region=region)
         response = client.start_execution(
             stateMachineArn=_state_machine_arn(company=company, environment=environment),
             input=json.dumps(payload),
@@ -320,10 +329,10 @@ def job_status(
     execution_status = ""
     execution_error = ""
     if execution_arn:
-        import boto3
+        from hiveflow.storage.aws import sfn_client
 
         region = os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION") or "us-east-2"
-        client = boto3.client("stepfunctions", region_name=region)
+        client = sfn_client(region=region)
         try:
             execution = client.describe_execution(executionArn=execution_arn)
             sf_status = str(execution.get("status") or "")
@@ -387,6 +396,11 @@ def job_status(
         error=str(job.get("error") or execution_error or ""),
         reload_mode=reload_mode,
     )
+    table_progress: list[dict[str, Any]] = []
+    if job_status_value == "proposing":
+        from hiveflow.spreadsheet.jobs import propose_table_progress
+
+        table_progress = propose_table_progress(job_id)
     return {
         "status": job_status_value,
         "job_id": job_id,
@@ -396,6 +410,7 @@ def job_status(
         "execution_arn": execution_arn,
         "execution_status": execution_status,
         "pipeline": pipeline,
+        "table_progress": table_progress,
     }
 
 

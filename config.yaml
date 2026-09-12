@@ -5,6 +5,7 @@ secrets:
   secret_name_template: hiveflow-{company}-{source}-{environment}
   data_bucket_name_template: meshflow-{company}-{account}-{region}
   athena_results_bucket_name_template: athena-results-{company}-{account}-{region}
+  glue_database_name_template: meshflow_{company}_{environment}
 platform:
   environments:
     dev:

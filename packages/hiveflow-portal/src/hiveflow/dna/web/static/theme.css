@@ -4261,6 +4261,48 @@
       margin: 0.85rem 0 0;
     }
 
+    .spreadsheet-table-progress {
+      margin-top: 0.9rem;
+      padding-top: 0.85rem;
+      border-top: 1px solid var(--border-subtle, rgba(148, 163, 184, 0.2));
+    }
+
+    .spreadsheet-table-progress-count {
+      margin: 0 0 0.5rem;
+      font-size: 0.85rem;
+    }
+
+    .spreadsheet-table-progress-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: grid;
+      gap: 0.4rem;
+    }
+
+    .spreadsheet-table-progress-item {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      font-size: 0.88rem;
+      color: var(--text-muted);
+    }
+
+    .spreadsheet-table-progress-icon {
+      width: 1.1rem;
+      flex-shrink: 0;
+      text-align: center;
+      color: var(--text-muted);
+    }
+
+    .spreadsheet-table-progress-item.is-ready {
+      color: var(--text);
+    }
+
+    .spreadsheet-table-progress-item.is-ready .spreadsheet-table-progress-icon {
+      color: #34d399;
+    }
+
     .spreadsheet-ready-banner {
       display: flex;
       flex-wrap: wrap;

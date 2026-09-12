@@ -21,12 +21,13 @@ UI_BUNDLE_REVISION = "20260818-spreadsheet-openpyxl"
 # Bump when DNA/ingest code Lambda must redeploy even if CDK asset cache is stale.
 DNA_BUNDLE_REVISION = "20260819-spreadsheet-induction-fallback"
 
-LambdaDepsProfile = Literal["full", "ui", "reporting"]
+LambdaDepsProfile = Literal["full", "ui", "reporting", "parser"]
 
 _PROFILE_REQUIREMENTS: dict[LambdaDepsProfile, str] = {
     "full": "requirements.txt",
     "ui": "requirements-lambda-ui.txt",
     "reporting": "requirements-lambda-reporting.txt",
+    "parser": "requirements-lambda-parser.txt",
 }
 
 PACKAGE_HIVEFLOW_ROOTS: tuple[Path, ...] = (
@@ -46,6 +47,24 @@ _PACKAGE_INCLUDE_GLOBS = [
     "!packages/hiveflow-portal/src/hiveflow/**",
     "!packages/hiveflow/src/hiveflow/**",
 ]
+
+# Extra top-level (non-`hiveflow`-namespace) vendored packages some profiles
+# need copied in verbatim alongside the merged `hiveflow` tree — keyed by
+# profile, each entry a (package directory under packages/, importable module
+# name) pair. Only "parser" (interpret/propose) needs these today.
+_PROFILE_EXTRA_PACKAGES: dict[LambdaDepsProfile, tuple[tuple[str, str], ...]] = {
+    "parser": (
+        ("hiveflow-core", "hiveflow_core"),
+        ("hiveflow-spreadsheet-parser", "hiveflow_spreadsheet_parser"),
+    ),
+}
+
+
+def _extra_package_roots(profile: LambdaDepsProfile) -> tuple[Path, ...]:
+    return tuple(
+        PROJECT_ROOT / "packages" / pkg_dir / "src" / module
+        for pkg_dir, module in _PROFILE_EXTRA_PACKAGES.get(profile, ())
+    )
 
 CODE_ASSET_EXCLUDE = [
     "**",
@@ -85,10 +104,15 @@ def _deps_asset_exclude(profile: LambdaDepsProfile) -> list[str]:
 
 def _combined_asset_exclude(profile: LambdaDepsProfile) -> list[str]:
     requirements_file = _PROFILE_REQUIREMENTS[profile]
+    extra_globs = [
+        f"!packages/{pkg_dir}/src/{module}/**"
+        for pkg_dir, module in _PROFILE_EXTRA_PACKAGES.get(profile, ())
+    ]
     return [
         "**",
         f"!{requirements_file}",
         *_PACKAGE_INCLUDE_GLOBS,
+        *extra_globs,
         "!config.yaml",
         "!process_config.yaml",
     ]
@@ -98,17 +122,24 @@ def _requirements_path(profile: LambdaDepsProfile) -> Path:
     return PROJECT_ROOT / _PROFILE_REQUIREMENTS[profile]
 
 
-def _hash_hiveflow_sources(digest: "hashlib._Hash") -> None:
+def _hash_hiveflow_sources(digest: "hashlib._Hash", extra_roots: tuple[Path, ...] = ()) -> None:
     for label, path in iter_hiveflow_source_files():
         digest.update(label.encode("utf-8"))
         digest.update(path.read_bytes())
+    for root in extra_roots:
+        if not root.is_dir():
+            continue
+        for path in sorted(root.rglob("*")):
+            if path.is_file():
+                digest.update(f"{root.name}:{path.relative_to(root).as_posix()}".encode("utf-8"))
+                digest.update(path.read_bytes())
 
 
 def _profile_asset_hash(profile: LambdaDepsProfile) -> str:
     """Content-aware hash so UI/reporting Lambdas redeploy when source changes."""
     digest = hashlib.sha256(f"{UI_BUNDLE_REVISION}:{profile}".encode("utf-8"))
     digest.update(_requirements_path(profile).read_bytes())
-    _hash_hiveflow_sources(digest)
+    _hash_hiveflow_sources(digest, _extra_package_roots(profile))
     for name in ("config.yaml", "process_config.yaml"):
         candidate = PROJECT_ROOT / name
         if candidate.is_file():
@@ -293,6 +324,9 @@ class LocalPythonCombinedBundling:
             return False
         try:
             assemble_hiveflow_tree(out / "hiveflow")
+            for root in _extra_package_roots(self._profile):
+                if root.is_dir():
+                    shutil.copytree(root, out / root.name, dirs_exist_ok=True)
             _copy_runtime_config(out)
             (out / ".hiveflow-bundle-rev").write_text(
                 f"{UI_BUNDLE_REVISION}:{self._profile}\n",
@@ -329,8 +363,9 @@ def _docker_deps_command(profile: LambdaDepsProfile) -> str:
     return f"pip install -r /asset-input/{requirements_file} -t /asset-output/python"
 
 
-def _docker_assemble_hiveflow() -> str:
-    """Bash snippet: merge package src trees into /asset-output/hiveflow."""
+def _docker_assemble_hiveflow(profile: LambdaDepsProfile = "full") -> str:
+    """Bash snippet: merge package src trees into /asset-output/hiveflow, plus
+    any extra top-level vendored packages ``profile`` needs alongside it."""
     copies = " && ".join(
         (
             "cp -a /asset-input/packages/hiveflow-platform/src/hiveflow/. /asset-output/hiveflow/",
@@ -341,14 +376,21 @@ def _docker_assemble_hiveflow() -> str:
             "cp -a /asset-input/packages/hiveflow/src/hiveflow/. /asset-output/hiveflow/",
         )
     )
-    return f"mkdir -p /asset-output/hiveflow && {copies}"
+    cmd = f"mkdir -p /asset-output/hiveflow && {copies}"
+    extra_copies = " && ".join(
+        f"cp -a /asset-input/packages/{pkg_dir}/src/{module} /asset-output/{module}"
+        for pkg_dir, module in _PROFILE_EXTRA_PACKAGES.get(profile, ())
+    )
+    if extra_copies:
+        cmd += f" && {extra_copies}"
+    return cmd
 
 
 def _docker_combined_command(profile: LambdaDepsProfile) -> str:
     requirements_file = _PROFILE_REQUIREMENTS[profile]
     return (
         f"pip install -r /asset-input/{requirements_file} -t /asset-output && "
-        f"{_docker_assemble_hiveflow()} && "
+        f"{_docker_assemble_hiveflow(profile)} && "
         "cp /asset-input/config.yaml /asset-output/config.yaml && "
         f"echo {UI_BUNDLE_REVISION}:{profile} > /asset-output/.hiveflow-bundle-rev && "
         "(test -f /asset-input/process_config.yaml && "
@@ -427,6 +469,7 @@ def hiveflow_lambda_deps_layer(
         "full": "HiveFlow full Python dependencies (ingest/DNA)",
         "ui": "HiveFlow UI Python dependencies (global site/login)",
         "reporting": "HiveFlow reporting Python dependencies (charts/KPIs)",
+        "parser": "HiveFlow spreadsheet-parser Python dependencies (interpret/propose)",
     }
     return _lambda.LayerVersion(
         scope,

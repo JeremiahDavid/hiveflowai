@@ -1,38 +1,16 @@
 from __future__ import annotations
 
-import os
 from typing import Any
 
 from aws_cdk import Duration
-from aws_cdk import aws_ecr_assets as ecr_assets
 from aws_cdk import aws_lambda as _lambda
 from aws_cdk import aws_s3 as s3
 from aws_cdk import aws_stepfunctions as sfn
 from aws_cdk import aws_stepfunctions_tasks as tasks
 from constructs import Construct
 
-from lambda_bundle import PROJECT_ROOT, HiveFlowLambdaRuntime
+from lambda_bundle import HiveFlowLambdaRuntime, hiveflow_lambda_runtime
 from hiveflow.process_config import Process, lambda_name_for_process, step_function_name_for_process
-
-# Bump to force the interpret/propose container images to rebuild + redeploy.
-AGENT_IMAGE_REVISION = "20260910-agent-sdk-interpret"
-
-# Default Bedrock model for the Agent SDK path (converse fallback keeps
-# HIVEFLOW_BEDROCK_MODEL_ID). Overridable via the HIVEFLOW_AGENT_MODEL /
-# HIVEFLOW_AGENT_MAX_BUDGET_USD env vars at synth time.
-_AGENT_MODEL = os.getenv("HIVEFLOW_AGENT_MODEL", "us.anthropic.claude-sonnet-5")
-_AGENT_MAX_BUDGET_USD = os.getenv("HIVEFLOW_AGENT_MAX_BUDGET_USD", "1.00")
-
-
-def _agent_image_code(handler: str) -> _lambda.DockerImageCode:
-    """Container image for an Agent-SDK spreadsheet stage (Node + `claude` CLI)."""
-    return _lambda.DockerImageCode.from_image_asset(
-        str(PROJECT_ROOT),
-        file="infra/agent_image/Dockerfile",
-        cmd=[handler],
-        platform=ecr_assets.Platform.LINUX_AMD64,
-        build_args={"AGENT_IMAGE_REVISION": AGENT_IMAGE_REVISION},
-    )
 
 
 def _apply_lambda_throttle_retry(task: tasks.LambdaInvoke) -> tasks.LambdaInvoke:
@@ -89,41 +67,77 @@ def create_spreadsheet_pipeline(
         layers=lambda_runtime.layers,
         environment=common_env,
     )
-    # interpret + propose run the vendored Claude Agent SDK (Node + `claude` CLI),
-    # so they ship as container images instead of the wheel-only zip. The Step
-    # Functions chain, `job_id` payload, and IAM below are unchanged.
-    agent_env = {
-        **common_env,
-        "ANTHROPIC_MODEL": _AGENT_MODEL,
-        "MAX_BUDGET_USD": _AGENT_MAX_BUDGET_USD,
-        # HIVEFLOW_AGENT_RUNTIME=sdk and CLAUDE_CODE_USE_BEDROCK=1 are baked into
-        # the image; HIVEFLOW_BEDROCK_MODEL_ID (in common_env) drives the
-        # converse fallback if the CLI is somehow unavailable.
-    }
-    # No explicit function_name: switching zip -> container image forces a
-    # CloudFormation replacement, and CFN refuses to replace a custom-named
-    # resource (name collision mid-update). These two are referenced only by
-    # ARN (the Step Functions tasks below); nothing looks them up by name.
-    interpret_fn = _lambda.DockerImageFunction(
+    # interpret + propose both talk to Bedrock directly (a native `converse`
+    # tool-use loop for interpret, a plain single-shot call for propose) — no
+    # Node, no `claude` CLI, so both are plain zip Lambdas like every other
+    # stage. They need hiveflow-spreadsheet-parser's own deps (pandas,
+    # python-calamine, pydantic) on top of the "full" set, hence the separate
+    # "parser" runtime bundle instead of the shared `lambda_runtime`. This used
+    # to be a container image (Node + the `claude` CLI via the Agent SDK) —
+    # that path was found to silently fail on every real invocation (Bedrock's
+    # own model-invocation logs showed a session-startup probe, an unused
+    # session-title call, then a multi-minute silent hang before falling back
+    # to `converse` anyway), so the same tools were ported onto Bedrock's own
+    # tool-use protocol instead.
+    parser_runtime = hiveflow_lambda_runtime(scope, profile="parser")
+    interpret_fn = _lambda.Function(
         scope,
         f"{prefix}SpreadsheetInterpretFunction",
-        code=_agent_image_code("hiveflow.spreadsheet.handlers.interpret_handler"),
+        function_name=lambda_name_for_process(
+            company, environment, "all", Process.SPREADSHEET_INTERPRET
+        ),
+        runtime=_lambda.Runtime.PYTHON_3_12,
+        handler="hiveflow.spreadsheet.handlers.interpret_handler",
         timeout=Duration.minutes(15),
         memory_size=2048,
-        description="Spreadsheet Engine: Agent SDK semantic analysis of spreadsheet tables",
-        environment=agent_env,
+        description="Spreadsheet Engine: Bedrock tool-use semantic analysis of spreadsheet tables",
+        code=parser_runtime.code,
+        layers=parser_runtime.layers,
+        environment=common_env,
     )
-    propose_fn = _lambda.DockerImageFunction(
+    propose_table_fn = _lambda.Function(
         scope,
         f"{prefix}SpreadsheetProposeFunction",
-        code=_agent_image_code("hiveflow.spreadsheet.handlers.propose_handler"),
+        function_name=lambda_name_for_process(
+            company, environment, "all", Process.SPREADSHEET_PROPOSE
+        ),
+        runtime=_lambda.Runtime.PYTHON_3_12,
+        handler="hiveflow.spreadsheet.handlers.propose_table_handler",
         timeout=Duration.minutes(15),
         memory_size=2048,
-        description="Spreadsheet Engine: Agent SDK transformation proposals",
-        environment=agent_env,
+        description="Spreadsheet Engine: Bedrock transformation proposal for one table",
+        code=parser_runtime.code,
+        layers=parser_runtime.layers,
+        environment=common_env,
+    )
+    # Plain zip Lambdas either side of the Map fan-out below — no Bedrock work,
+    # just S3 reads/writes, so the "full" runtime (no spreadsheet-parser deps) is enough.
+    propose_prepare_fn = _lambda.Function(
+        scope,
+        f"{prefix}SpreadsheetProposePrepareFunction",
+        runtime=_lambda.Runtime.PYTHON_3_12,
+        handler="hiveflow.spreadsheet.handlers.propose_prepare_handler",
+        timeout=Duration.minutes(2),
+        memory_size=512,
+        description="Spreadsheet Engine: flip job to proposing, list table_ids to fan out over",
+        code=lambda_runtime.code,
+        layers=lambda_runtime.layers,
+        environment=common_env,
+    )
+    propose_finalize_fn = _lambda.Function(
+        scope,
+        f"{prefix}SpreadsheetProposeFinalizeFunction",
+        runtime=_lambda.Runtime.PYTHON_3_12,
+        handler="hiveflow.spreadsheet.handlers.propose_finalize_handler",
+        timeout=Duration.minutes(5),
+        memory_size=512,
+        description="Spreadsheet Engine: aggregate per-table proposals into the final report",
+        code=lambda_runtime.code,
+        layers=lambda_runtime.layers,
+        environment=common_env,
     )
 
-    for fn in (parse_fn, profile_fn, interpret_fn, propose_fn):
+    for fn in (parse_fn, profile_fn, interpret_fn, propose_table_fn, propose_prepare_fn, propose_finalize_fn):
         data_bucket.grant_read_write(fn)
         grant_bedrock(fn)
 
@@ -161,11 +175,57 @@ def create_spreadsheet_pipeline(
             ),
         )
     )
-    propose_task = _apply_lambda_throttle_retry(
+    propose_prepare_task = _apply_lambda_throttle_retry(
         tasks.LambdaInvoke(
             scope,
-            f"{prefix}SpreadsheetProposeTask",
-            lambda_function=propose_fn,
+            f"{prefix}SpreadsheetProposePrepareTask",
+            lambda_function=propose_prepare_fn,
+            output_path="$.Payload",
+            payload=sfn.TaskInput.from_object(
+                {
+                    "job_id": sfn.JsonPath.string_at("$.job_id"),
+                }
+            ),
+        )
+    )
+    propose_table_task = _apply_lambda_throttle_retry(
+        tasks.LambdaInvoke(
+            scope,
+            f"{prefix}SpreadsheetProposeTableTask",
+            lambda_function=propose_table_fn,
+            output_path="$.Payload",
+            payload=sfn.TaskInput.from_object(
+                {
+                    "job_id": sfn.JsonPath.string_at("$.job_id"),
+                    "table_id": sfn.JsonPath.string_at("$.table_id"),
+                }
+            ),
+        )
+    )
+    # A table's proposal (one Bedrock oracle-clean call) still takes real time;
+    # running every table sequentially in a single 900s Lambda invocation would
+    # time out on any workbook with more than a handful of tables. Fan out per
+    # table instead; each branch only ever
+    # writes its own table's S3 key, so branches can run concurrently without
+    # racing on the shared job.json (that's written once, before and after,
+    # by propose_prepare_task / propose_finalize_task).
+    propose_map = sfn.Map(
+        scope,
+        f"{prefix}SpreadsheetProposeMap",
+        items_path=sfn.JsonPath.string_at("$.table_ids"),
+        item_selector={
+            "job_id": sfn.JsonPath.string_at("$.job_id"),
+            "table_id": sfn.JsonPath.string_at("$$.Map.Item.Value"),
+        },
+        max_concurrency=4,
+        result_path=sfn.JsonPath.DISCARD,
+    )
+    propose_map.item_processor(propose_table_task)
+    propose_finalize_task = _apply_lambda_throttle_retry(
+        tasks.LambdaInvoke(
+            scope,
+            f"{prefix}SpreadsheetProposeFinalizeTask",
+            lambda_function=propose_finalize_fn,
             output_path="$.Payload",
             payload=sfn.TaskInput.from_object(
                 {
@@ -175,7 +235,13 @@ def create_spreadsheet_pipeline(
         )
     )
 
-    definition = parse_task.next(profile_task).next(interpret_task).next(propose_task)
+    definition = (
+        parse_task.next(profile_task)
+        .next(interpret_task)
+        .next(propose_prepare_task)
+        .next(propose_map)
+        .next(propose_finalize_task)
+    )
     state_machine = sfn.StateMachine(
         scope,
         f"{prefix}SpreadsheetAnalyzeStateMachine",
@@ -183,8 +249,10 @@ def create_spreadsheet_pipeline(
             company, environment, "all", Process.SPREADSHEET_ANALYZE
         ),
         definition_body=sfn.DefinitionBody.from_chainable(definition),
-        # parse(5) + profile(5) + interpret(15) + propose(15) at max, plus retry
-        # slack, exceeds 30m now that interpret/propose are agent-backed.
+        # parse(5) + profile(5) + interpret(15) + one table's propose(15) at
+        # max, plus retry slack. Tables run in parallel (max_concurrency=4) so
+        # total wall time no longer scales with table count the way a single
+        # sequential propose Lambda did.
         timeout=Duration.minutes(50),
     )
 
@@ -193,5 +261,7 @@ def create_spreadsheet_pipeline(
         "parse_function": parse_fn,
         "profile_function": profile_fn,
         "interpret_function": interpret_fn,
-        "propose_function": propose_fn,
+        "propose_function": propose_table_fn,
+        "propose_prepare_function": propose_prepare_fn,
+        "propose_finalize_function": propose_finalize_fn,
     }

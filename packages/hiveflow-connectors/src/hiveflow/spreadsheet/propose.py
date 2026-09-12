@@ -76,6 +76,95 @@ def _catalog_reuse_transformation(
     }
 
 
+def propose_transform_for_table(
+    *,
+    table: dict[str, Any],
+    parse_table: dict[str, Any],
+    linked_catalog: dict[str, Any] | None = None,
+    knowledge_entries: list[dict[str, Any]] | None = None,
+    sample: dict[str, Any] | None = None,
+    invoke: Callable[[str, str], str] | None = None,
+) -> dict[str, Any]:
+    """Propose a cleaned transformation for exactly one table.
+
+    Split out of ``propose_transforms_for_report`` so a Step Functions Map state
+    can fan a job's tables out across parallel Lambda invocations (each table's
+    AI call can take minutes; a job with many tables would otherwise exceed the
+    900s Lambda ceiling running them one after another in a single invocation).
+    """
+    kb = list(knowledge_entries or [])
+    sample = dict(sample or {})
+    if not sample.get("rows") and parse_table.get("sample_rows"):
+        sample = {
+            "headers": list(parse_table.get("headers") or []),
+            "rows": list(parse_table.get("sample_rows") or []),
+        }
+
+    reused = _catalog_reuse_transformation(
+        table=table,
+        parse_table=parse_table,
+        linked_catalog=linked_catalog,
+        knowledge_entries=kb,
+    )
+    if reused:
+        proposal = reused
+    elif sample.get("rows"):
+        headers = [
+            str(name)
+            for name in (sample.get("headers") or parse_table.get("headers") or [])
+        ]
+        proposal = propose_clean_goal(
+            headers=headers,
+            rows=list(sample.get("rows") or []),
+            table=table,
+            invoke=invoke,
+        )
+    else:
+        proposal = {
+            "clean_goal": {
+                "headers": list(parse_table.get("headers") or []),
+                "rows": [],
+                "row_count": 0,
+                "preview_row_count": 0,
+                "truncated": False,
+                "grain": str(table.get("grain") or ""),
+                "notes": ["No sample rows available for cleaning"],
+                "source": "empty",
+            },
+            "clean_shape_status": "pending_review",
+            "clean_shape_notes": ["No sample rows available"],
+            "transformation": empty_transformation(),
+            "transformation_status": "awaiting_shape",
+            "transformation_confidence": 0.0,
+            "transformation_notes": [],
+            "transformation_drift": [],
+        }
+
+    input_shape = compute_input_shape(parse_table) if parse_table else {}
+    transformation = proposal.get("transformation") or empty_transformation()
+    if input_shape and not transformation.get("input_shape"):
+        transformation["input_shape"] = input_shape
+    if not transformation.get("output_shape"):
+        goal = proposal.get("clean_goal") or {}
+        goal_headers = [str(h) for h in (goal.get("headers") or []) if str(h).strip()]
+        if goal_headers:
+            transformation["output_shape"] = {
+                "entity_name": str(table.get("entity_name") or ""),
+                "grain": str(goal.get("grain") or table.get("grain") or ""),
+                "schema": [{"name": name, "type": "string"} for name in goal_headers],
+            }
+        else:
+            transformation["output_shape"] = build_output_shape(table)
+    proposal["transformation"] = transformation
+
+    grain = str((proposal.get("clean_goal") or {}).get("grain") or "").strip()
+    updated = {**table, **proposal}
+    if grain:
+        updated["grain"] = grain
+    updated["pipeline_stage"] = table_pipeline_stage(updated)
+    return updated
+
+
 def propose_transforms_for_report(
     report: dict[str, Any],
     parse_payload: dict[str, Any],
@@ -86,7 +175,12 @@ def propose_transforms_for_report(
     table_samples: dict[str, dict[str, Any]] | None = None,
     invoke: Callable[[str, str], str] | None = None,
 ) -> dict[str, Any]:
-    """Propose cleaned shapes for each table (transform steps come after shape approve)."""
+    """Propose cleaned shapes for each table (transform steps come after shape approve).
+
+    Sequential — used by the local/dev synchronous pipeline only. The deployed
+    Step Functions pipeline fans tables out via ``propose_transform_for_table``
+    instead (see ``run_propose_table`` / ``run_propose_finalize`` in ``jobs.py``).
+    """
     del profile_payload  # reserved for future clean-path hints
     parse_tables = {
         str(t.get("table_id")): t
@@ -102,75 +196,14 @@ def propose_transforms_for_report(
             continue
         table_id = str(table.get("table_id") or "")
         parse_table = parse_tables.get(table_id) or {}
-        sample = samples.get(table_id) or {}
-        if not sample.get("rows") and parse_table.get("sample_rows"):
-            sample = {
-                "headers": list(parse_table.get("headers") or []),
-                "rows": list(parse_table.get("sample_rows") or []),
-            }
-
-        reused = _catalog_reuse_transformation(
+        updated = propose_transform_for_table(
             table=table,
             parse_table=parse_table,
             linked_catalog=linked_catalog,
             knowledge_entries=kb,
+            sample=samples.get(table_id) or {},
+            invoke=invoke,
         )
-        if reused:
-            proposal = reused
-        elif sample.get("rows"):
-            headers = [
-                str(name)
-                for name in (sample.get("headers") or parse_table.get("headers") or [])
-            ]
-            proposal = propose_clean_goal(
-                headers=headers,
-                rows=list(sample.get("rows") or []),
-                table=table,
-                invoke=invoke,
-            )
-        else:
-            proposal = {
-                "clean_goal": {
-                    "headers": list(parse_table.get("headers") or []),
-                    "rows": [],
-                    "row_count": 0,
-                    "preview_row_count": 0,
-                    "truncated": False,
-                    "grain": str(table.get("grain") or ""),
-                    "notes": ["No sample rows available for cleaning"],
-                    "source": "empty",
-                },
-                "clean_shape_status": "pending_review",
-                "clean_shape_notes": ["No sample rows available"],
-                "transformation": empty_transformation(),
-                "transformation_status": "awaiting_shape",
-                "transformation_confidence": 0.0,
-                "transformation_notes": [],
-                "transformation_drift": [],
-            }
-
-        input_shape = compute_input_shape(parse_table) if parse_table else {}
-        transformation = proposal.get("transformation") or empty_transformation()
-        if input_shape and not transformation.get("input_shape"):
-            transformation["input_shape"] = input_shape
-        if not transformation.get("output_shape"):
-            goal = proposal.get("clean_goal") or {}
-            goal_headers = [str(h) for h in (goal.get("headers") or []) if str(h).strip()]
-            if goal_headers:
-                transformation["output_shape"] = {
-                    "entity_name": str(table.get("entity_name") or ""),
-                    "grain": str(goal.get("grain") or table.get("grain") or ""),
-                    "schema": [{"name": name, "type": "string"} for name in goal_headers],
-                }
-            else:
-                transformation["output_shape"] = build_output_shape(table)
-        proposal["transformation"] = transformation
-
-        grain = str((proposal.get("clean_goal") or {}).get("grain") or "").strip()
-        updated = {**table, **proposal}
-        if grain:
-            updated["grain"] = grain
-        updated["pipeline_stage"] = table_pipeline_stage(updated)
         updated_tables.append(updated)
 
     report["tables"] = updated_tables

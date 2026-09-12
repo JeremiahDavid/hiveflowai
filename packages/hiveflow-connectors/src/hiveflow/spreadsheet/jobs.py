@@ -21,6 +21,7 @@ from hiveflow.spreadsheet.transform import (
     preview_transformation,
     slugify_filename,
 )
+from hiveflow.storage.aws import s3_client
 from hiveflow.storage.paths import (
     prefix_path,
     spreadsheet_engine_catalog_entry_key,
@@ -64,9 +65,7 @@ def _write_json(key: str, payload: dict[str, Any]) -> str:
     body = json.dumps(payload, indent=2, default=str).encode("utf-8")
     bucket = _bucket()
     if bucket:
-        import boto3
-
-        boto3.client("s3").put_object(
+        s3_client().put_object(
             Bucket=bucket,
             Key=key,
             Body=body,
@@ -82,9 +81,7 @@ def _write_json(key: str, payload: dict[str, Any]) -> str:
 def _read_json(key: str) -> dict[str, Any] | None:
     bucket = _bucket()
     if bucket:
-        import boto3
-
-        client = boto3.client("s3")
+        client = s3_client()
         try:
             response = client.get_object(Bucket=bucket, Key=key)
         except client.exceptions.NoSuchKey:
@@ -105,9 +102,7 @@ def _read_json(key: str) -> dict[str, Any] | None:
 def _write_bytes(key: str, body: bytes, *, content_type: str) -> str:
     bucket = _bucket()
     if bucket:
-        import boto3
-
-        boto3.client("s3").put_object(
+        s3_client().put_object(
             Bucket=bucket,
             Key=key,
             Body=body,
@@ -123,9 +118,7 @@ def _write_bytes(key: str, body: bytes, *, content_type: str) -> str:
 def _read_bytes(key: str) -> bytes:
     bucket = _bucket()
     if bucket:
-        import boto3
-
-        response = boto3.client("s3").get_object(Bucket=bucket, Key=key)
+        response = s3_client().get_object(Bucket=bucket, Key=key)
         return response["Body"].read()
     path = prefix_path(_data_dir(), key)
     return path.read_bytes()
@@ -487,6 +480,177 @@ def run_propose(job_id: str, *, force_ai: bool = False) -> dict[str, Any]:
     return save_job(job)
 
 
+def run_propose_prepare(job_id: str) -> dict[str, Any]:
+    """Flip the job to 'proposing' and hand back the table_ids to fan out over.
+
+    Runs once, before the Step Functions Map state — per-table branches (see
+    ``run_propose_table``) never touch job.json, so there's no risk of parallel
+    branches clobbering each other's writes to the shared job record.
+    """
+    job = load_job(job_id) or {}
+    if _is_reload_job(job):
+        job["status"] = "proposing"
+        job = save_job(job)
+        return {"job_id": job_id, "table_ids": [], "reload": True}
+    job["status"] = "proposing"
+    job = save_job(job)
+    table_ids = [str(tid) for tid in (job.get("table_ids") or []) if str(tid).strip()]
+    if not table_ids:
+        table_ids = _list_table_ids(job_id)
+    return {"job_id": job_id, "table_ids": table_ids, "reload": False}
+
+
+def run_propose_table(
+    job_id: str,
+    table_id: str,
+    *,
+    invoke: Any = None,
+) -> dict[str, Any]:
+    """Propose a cleaned transformation for exactly one table (Map-state branch).
+
+    ``invoke`` is passed straight through to ``propose_transform_for_table`` —
+    tests pass ``invoke=False`` to skip the real AI call (see CLAUDE.md).
+    """
+    from hiveflow.spreadsheet.propose import propose_transform_for_table
+
+    job = load_job(job_id) or {}
+    parse_payload = _read_json(spreadsheet_engine_job_parse_key(job_id))
+    report = load_report(job_id)
+    if not parse_payload or not report:
+        raise ValueError(f"Missing parse/report for job {job_id!r}")
+
+    table = next(
+        (
+            t
+            for t in report.get("tables") or []
+            if isinstance(t, dict) and str(t.get("table_id") or "") == table_id
+        ),
+        None,
+    )
+    if table is None:
+        raise ValueError(f"Unknown table {table_id!r} for job {job_id!r}")
+    parse_table = next(
+        (
+            t
+            for t in parse_payload.get("tables") or []
+            if isinstance(t, dict) and str(t.get("table_id") or "") == table_id
+        ),
+        {},
+    )
+
+    linked_catalog = None
+    linked_id = str(job.get("linked_catalog_id") or "").strip().lower()
+    if linked_id:
+        linked_catalog = load_catalog_entry(linked_id)
+
+    input_shape = compute_input_shape(parse_table) if parse_table else {}
+    knowledge_entries = load_knowledge_matches(shape_hash=input_shape.get("shape_hash") or "")
+
+    filename = str(job.get("filename") or "workbook.xlsx")
+    upload_key = str(job.get("upload_key") or spreadsheet_engine_job_upload_key(job_id, filename))
+    with tempfile.TemporaryDirectory() as tmp:
+        local_path = Path(tmp) / filename
+        local_path.write_bytes(_read_bytes(upload_key))
+        from hiveflow.spreadsheet.sample import extract_table_sample
+
+        sample = extract_table_sample(
+            local_path,
+            sheet=str(parse_table.get("sheet") or ""),
+            data_start_row=int(parse_table.get("data_start_row") or 0),
+            data_end_row=int(parse_table.get("data_end_row") or 0),
+            min_col=int(parse_table.get("min_col") or 1),
+            max_col=int(parse_table.get("max_col") or 1),
+            headers=[str(name) for name in (parse_table.get("headers") or []) if str(name).strip()],
+            header_col_offsets=list(parse_table.get("header_col_offsets") or []),
+        )
+
+    updated = propose_transform_for_table(
+        table=table,
+        parse_table=parse_table,
+        linked_catalog=linked_catalog,
+        knowledge_entries=knowledge_entries,
+        sample=sample,
+        invoke=invoke,
+    )
+    _write_json(spreadsheet_engine_job_table_key(job_id, table_id), updated)
+    return {"job_id": job_id, "table_id": table_id, "status": "ok"}
+
+
+def run_propose_finalize(job_id: str) -> dict[str, Any]:
+    """Aggregate the Map state's per-table proposals into the final report."""
+    job = load_job(job_id) or {}
+    if _is_reload_job(job):
+        return run_reload_finalize(job_id)
+
+    parse_payload = _read_json(spreadsheet_engine_job_parse_key(job_id))
+    report = load_report(job_id)
+    if not parse_payload or not report:
+        raise ValueError(f"Missing parse/report for job {job_id!r}")
+
+    table_ids = [
+        str(t.get("table_id") or "")
+        for t in report.get("tables") or []
+        if isinstance(t, dict) and t.get("table_id")
+    ]
+    updated_tables = []
+    for table_id in table_ids:
+        proposed = _read_json(spreadsheet_engine_job_table_key(job_id, table_id))
+        if proposed is None:
+            raise ValueError(f"Missing proposal output for table {table_id!r} (job {job_id!r})")
+        updated_tables.append(proposed)
+
+    report["tables"] = updated_tables
+    report["table_count"] = len(updated_tables)
+    filename = str(parse_payload.get("filename") or report.get("filename") or "")
+    report["filename"] = filename
+    report["source_file_slug"] = slugify_filename(filename)
+    report["job_id"] = job_id
+    _write_json(spreadsheet_engine_job_report_key(job_id), report)
+
+    linked_id = str(job.get("linked_catalog_id") or "").strip().lower()
+    if linked_id and load_catalog_entry(linked_id):
+        record_upload_on_catalog(
+            linked_id,
+            job_id=job_id,
+            uploaded_by=str(job.get("created_by") or ""),
+            input_shape_hash=_first_shape_hash(parse_payload),
+        )
+
+    job = load_job(job_id) or job
+    job["status"] = "ready"
+    job["report_key"] = spreadsheet_engine_job_report_key(job_id)
+    job["table_count"] = report.get("table_count", 0)
+    return save_job(job)
+
+
+def propose_table_progress(job_id: str) -> list[dict[str, Any]]:
+    """Per-table propose status while the Map state's branches are still running.
+
+    A table's S3 key exists from the moment ``run_interpret`` writes it (before
+    propose ever starts), so existence alone can't signal completion — check
+    for ``clean_goal`` instead, which only ``run_propose_table`` ever sets.
+    Lets the UI show live per-table progress instead of one job-wide spinner
+    for the several-minutes-long fan-out.
+    """
+    job = load_job(job_id) or {}
+    table_ids = [str(tid) for tid in (job.get("table_ids") or []) if str(tid).strip()]
+    if not table_ids:
+        table_ids = _list_table_ids(job_id)
+
+    progress: list[dict[str, Any]] = []
+    for table_id in table_ids:
+        table = _read_json(spreadsheet_engine_job_table_key(job_id, table_id))
+        ready = bool(table and table.get("clean_goal"))
+        progress.append(
+            {
+                "table_id": table_id,
+                "status": "ready" if ready else "pending",
+                "entity_name": str((table or {}).get("entity_name") or ""),
+            }
+        )
+    return progress
+
+
 def _first_shape_hash(parse_payload: dict[str, Any]) -> str:
     for table in parse_payload.get("tables") or []:
         if isinstance(table, dict):
@@ -531,9 +695,7 @@ def _list_table_ids(job_id: str) -> list[str]:
     table_ids: list[str] = []
     bucket = _bucket()
     if bucket:
-        import boto3
-
-        client = boto3.client("s3")
+        client = s3_client()
         paginator = client.get_paginator("list_objects_v2")
         for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
             for item in page.get("Contents") or []:
@@ -647,9 +809,7 @@ def list_jobs(limit: int = 50) -> list[dict[str, Any]]:
     bucket = _bucket()
     jobs: list[dict[str, Any]] = []
     if bucket:
-        import boto3
-
-        client = boto3.client("s3")
+        client = s3_client()
         paginator = client.get_paginator("list_objects_v2")
         keys: list[str] = []
         for page in paginator.paginate(Bucket=bucket, Prefix=f"{spreadsheet_engine_jobs_prefix()}/"):
@@ -789,9 +949,7 @@ def list_knowledge_entries(limit: int = 200) -> list[dict[str, Any]]:
     bucket = _bucket()
     entries: list[dict[str, Any]] = []
     if bucket:
-        import boto3
-
-        client = boto3.client("s3")
+        client = s3_client()
         paginator = client.get_paginator("list_objects_v2")
         keys: list[str] = []
         for page in paginator.paginate(Bucket=bucket, Prefix=f"{spreadsheet_engine_knowledge_prefix()}/"):
@@ -974,9 +1132,7 @@ def list_catalog_entries(limit: int = 100) -> list[dict[str, Any]]:
     bucket = _bucket()
     entries: list[dict[str, Any]] = []
     if bucket:
-        import boto3
-
-        client = boto3.client("s3")
+        client = s3_client()
         paginator = client.get_paginator("list_objects_v2")
         keys: list[str] = []
         for page in paginator.paginate(Bucket=bucket, Prefix=f"{spreadsheet_engine_catalog_prefix()}/"):
