@@ -1,0 +1,31 @@
+# Spreadsheet Lab sandbox UI + worker — one Lambda handles both API Gateway
+# requests (FastAPI/Mangum) and the async self-invoke table-task path
+# (hiveflow.spreadsheet_lab.worker). Deliberately NOT `-r requirements.txt`:
+# no werkzeug/a2wsgi (this app is never mounted into the legacy WSGI portal),
+# no lxml/cryptography/httpx/intuit-oauth (BC/QBO connector auth, unrelated
+# here). List only what the app and the reused hiveflow.spreadsheet/_agent_runtime
+# + hiveflow_spreadsheet_parser modules actually import, at runtime, transitively.
+
+boto3>=1.35.0
+botocore>=1.35.0
+pyyaml>=6.0.0
+typing_extensions>=4.12.0
+openpyxl>=3.1.5
+pyarrow>=18.0.0
+
+# Web app.
+fastapi>=0.115.0
+mangum>=0.17.0
+jinja2>=3.1.0
+python-multipart>=0.0.9
+
+# hiveflow-spreadsheet-parser deterministic layer (grid detection, table extraction).
+pandas>=2.2
+python-calamine>=0.2
+pydantic>=2.7
+
+# hiveflow_core is imported for plain helpers (json_default) shared with
+# hiveflow_spreadsheet_parser.tools. Its agent/bedrock submodules (which need
+# claude_agent_sdk — a large package that vendors the Node.js `claude` CLI
+# binary) are loaded lazily by hiveflow_core/__init__.py, so nothing here
+# pulls that in.

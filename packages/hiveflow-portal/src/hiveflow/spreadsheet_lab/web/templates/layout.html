@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Spreadsheet Lab{% endblock %}</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { font-family: -apple-system, Segoe UI, Roboto, sans-serif; margin: 0; padding: 24px;
+           background: #f7f7f8; color: #1a1a1a; }
+    a { color: #0f766e; }
+    .wrap { max-width: 960px; margin: 0 auto; }
+    header.page { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 24px; }
+    header.page h1 { font-size: 1.4rem; margin: 0; }
+    .card { background: #fff; border: 1px solid #e5e5e5; border-radius: 8px; padding: 20px; margin-bottom: 16px; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 0.75rem;
+             font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
+    .badge.pending_review { background: #fef3c7; color: #92400e; }
+    .badge.processing { background: #dbeafe; color: #1e40af; }
+    .badge.approved { background: #dcfce7; color: #166534; }
+    .badge.discarded { background: #f3f4f6; color: #6b7280; }
+    .badge.rejected_retry { background: #fee2e2; color: #991b1b; }
+    table.schema { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 0.9rem; }
+    table.schema th, table.schema td { text-align: left; padding: 4px 8px; border-bottom: 1px solid #eee; }
+    textarea { width: 100%; box-sizing: border-box; min-height: 60px; font-family: inherit; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+    button, input[type=submit] { padding: 6px 14px; border-radius: 6px; border: 1px solid #ccc;
+           background: #fff; cursor: pointer; font-size: 0.9rem; }
+    button.primary { background: #0f766e; color: #fff; border-color: #0f766e; }
+    button.danger { background: #fff; color: #b91c1c; border-color: #f3c4c4; }
+    .muted { color: #6b7280; font-size: 0.85rem; }
+    .feedback-entry { border-left: 2px solid #ddd; padding-left: 8px; margin-bottom: 6px; font-size: 0.85rem; }
+    .empty { color: #6b7280; font-style: italic; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="page">
+      <h1><a href="/" style="text-decoration:none;color:inherit;">Spreadsheet Lab</a></h1>
+      <span class="muted">sandbox — not production data</span>
+    </header>
+    {% block content %}{% endblock %}
+  </div>
+</body>
+</html>

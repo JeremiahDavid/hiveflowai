@@ -56,6 +56,8 @@ from hiveflow.project_config import (
     portal_web_api_export_name,
     provisioning_stack_module_name,
     provisioning_stack_name,
+    get_spreadsheet_lab_config,
+    is_spreadsheet_lab_enabled,
     reporting_stack_module_name,
     reporting_stack_name,
     reporting_web_api_export_name,
@@ -64,6 +66,8 @@ from hiveflow.project_config import (
     resolve_dna_source,
     resolve_portal_client_buckets,
     resolve_qbo_secret_name,
+    spreadsheet_lab_stack_module_name,
+    spreadsheet_lab_stack_name,
 )
 
 app = cdk.App()
@@ -169,6 +173,7 @@ if cdk_scope in ("all", "platform") and platform_enabled:
     portal_module = importlib.import_module(f"stacks.{portal_stack_module_name()}")
     platform_admin_module = importlib.import_module(f"stacks.{platform_admin_stack_module_name()}")
     provisioning_module = importlib.import_module(f"stacks.{provisioning_stack_module_name()}")
+    spreadsheet_lab_module = importlib.import_module(f"stacks.{spreadsheet_lab_stack_module_name()}")
 
     # Legacy per-client ReportingStack + per-client reporting DNS records. Off by
     # default now that PortalStack serves every client through the wildcard
@@ -218,6 +223,32 @@ if cdk_scope in ("all", "platform") and platform_enabled:
             ),
             description=f"Shared multi-tenant AI-agent pipelines (Spreadsheet Engine) for {environment}",
         )
+
+        # Standalone sandbox for the Spreadsheet Lab rebuild — deliberately not
+        # gated on is_platform_ui_enabled/global_ui_stack: it deploys and tears
+        # down independently of every other platform stack so it can iterate
+        # fast (see docs/spreadsheet-lab.md and infra/stacks/spreadsheet_lab_stack.py).
+        lab_config = get_spreadsheet_lab_config(platform_env_config)
+        if is_spreadsheet_lab_enabled(platform_env_config):
+            lab_bucket_name = resolve_data_bucket_name(
+                "poc",
+                environment,
+                account=account,
+                region=region,
+            )
+            spreadsheet_lab_module.SpreadsheetLabStack(
+                app,
+                spreadsheet_lab_stack_name(environment),
+                environment=environment,
+                ui_config=ui_config,
+                lab_config=lab_config,
+                data_bucket_name=lab_bucket_name,
+                env=cdk.Environment(
+                    account=account,
+                    region=region,
+                ),
+                description=f"Spreadsheet Lab sandbox for {environment}",
+            )
 
         global_ui_stack = None
         if is_platform_ui_enabled(platform_env_config):

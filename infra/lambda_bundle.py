@@ -21,13 +21,14 @@ UI_BUNDLE_REVISION = "20260818-spreadsheet-openpyxl"
 # Bump when DNA/ingest code Lambda must redeploy even if CDK asset cache is stale.
 DNA_BUNDLE_REVISION = "20260819-spreadsheet-induction-fallback"
 
-LambdaDepsProfile = Literal["full", "ui", "reporting", "parser"]
+LambdaDepsProfile = Literal["full", "ui", "reporting", "parser", "spreadsheet_lab"]
 
 _PROFILE_REQUIREMENTS: dict[LambdaDepsProfile, str] = {
     "full": "requirements.txt",
     "ui": "requirements-lambda-ui.txt",
     "reporting": "requirements-lambda-reporting.txt",
     "parser": "requirements-lambda-parser.txt",
+    "spreadsheet_lab": "requirements-lambda-spreadsheet-lab.txt",
 }
 
 PACKAGE_HIVEFLOW_ROOTS: tuple[Path, ...] = (
@@ -54,6 +55,17 @@ _PACKAGE_INCLUDE_GLOBS = [
 # name) pair. Only "parser" (interpret/propose) needs these today.
 _PROFILE_EXTRA_PACKAGES: dict[LambdaDepsProfile, tuple[tuple[str, str], ...]] = {
     "parser": (
+        ("hiveflow-core", "hiveflow_core"),
+        ("hiveflow-spreadsheet-parser", "hiveflow_spreadsheet_parser"),
+    ),
+    # Spreadsheet Lab's extract_agent.py uses hiveflow_spreadsheet_parser's
+    # ParseSession/tools directly via the plain Bedrock converse loop — no
+    # Agent-SDK backend needed (see _agent_runtime.py) — but
+    # hiveflow_spreadsheet_parser.tools itself imports hiveflow_core.json_default
+    # at module level, so hiveflow-core still has to ship alongside it (same as
+    # the "parser" profile above; hiveflow_core's own agent/bedrock submodules,
+    # which need claude_agent_sdk, are loaded lazily and never imported here).
+    "spreadsheet_lab": (
         ("hiveflow-core", "hiveflow_core"),
         ("hiveflow-spreadsheet-parser", "hiveflow_spreadsheet_parser"),
     ),
@@ -470,6 +482,7 @@ def hiveflow_lambda_deps_layer(
         "ui": "HiveFlow UI Python dependencies (global site/login)",
         "reporting": "HiveFlow reporting Python dependencies (charts/KPIs)",
         "parser": "HiveFlow spreadsheet-parser Python dependencies (interpret/propose)",
+        "spreadsheet_lab": "HiveFlow Spreadsheet Lab sandbox Python dependencies",
     }
     return _lambda.LayerVersion(
         scope,

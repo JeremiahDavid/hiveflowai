@@ -1,0 +1,30 @@
+{% extends "layout.html" %}
+{% block title %}Spreadsheet Lab — Upload{% endblock %}
+{% block content %}
+  <div class="card">
+    <h2 style="margin-top:0;">Upload a workbook</h2>
+    <form method="post" action="/upload" enctype="multipart/form-data">
+      <input type="file" name="file" accept=".xlsx,.xlsm" required>
+      <div class="row">
+        <button class="primary" type="submit">Upload &amp; analyze</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2 style="margin-top:0;">Recent jobs</h2>
+    {% if jobs %}
+      {% for job in jobs %}
+        <div class="row" style="justify-content: space-between; border-bottom: 1px solid #eee; padding: 8px 0;">
+          <div>
+            <a href="/jobs/{{ job.job_id }}">{{ job.filename }}</a>
+            <span class="muted"> — {{ job.created_at }}</span>
+          </div>
+          <span class="badge {{ job.status }}">{{ job.status }}</span>
+        </div>
+      {% endfor %}
+    {% else %}
+      <p class="empty">No jobs yet.</p>
+    {% endif %}
+  </div>
+{% endblock %}

@@ -41,6 +41,14 @@ platform:
               reporting_company: poc2
               reporting_hostname: poc2
               welcome_title: Your operational dashboard
+        spreadsheet_lab:
+          # Standalone sandbox for the Spreadsheet Lab rebuild (see
+          # docs/spreadsheet-lab.md). Deliberately off by default — flip to
+          # true and set basic_auth_secret_arn (create the secret first via
+          # scripts/create_secrets.py) before deploying SpreadsheetLabStack-dev.
+          enabled: false
+          hostname: spreadsheet-engine
+          basic_auth_secret_arn: ''
         domain:
           zone_name: hive-flow-ai.com
           primary_hostname: hive-flow-ai.com

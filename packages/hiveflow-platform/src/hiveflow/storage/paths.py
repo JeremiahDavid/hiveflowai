@@ -476,3 +476,87 @@ def spreadsheet_engine_knowledge_entry_key(knowledge_id: str) -> str:
 def prefix_path(data_dir: Path, prefix: str, *parts: str) -> Path:
     segments = [segment for segment in prefix.strip("/").split("/") if segment]
     return data_dir.joinpath(*segments, *parts)
+
+
+# ── Spreadsheet Lab (parallel, simplified rebuild — see docs/spreadsheet-lab.md) ──
+#
+# Deliberately isolated from every ``spreadsheet_engine_*``/``SPREADSHEET_REFERENCE_SOURCE``
+# key above: same bucket may hold real ``spreadsheet_engine`` job data (e.g. for the
+# ``poc`` company today), so the lab uses its own prefix and its own silver source
+# name to guarantee it can never read or overwrite the production engine's data.
+
+SPREADSHEET_LAB_REFERENCE_SOURCE = "reference_lab"
+
+
+def spreadsheet_lab_prefix() -> str:
+    """Governance artifacts for the Spreadsheet Lab sandbox engine."""
+    return f"{governance_prefix()}/spreadsheet_lab"
+
+
+def spreadsheet_lab_jobs_prefix() -> str:
+    return f"{spreadsheet_lab_prefix()}/jobs"
+
+
+def spreadsheet_lab_job_prefix(job_id: str) -> str:
+    jid = job_id.strip().lower()
+    if not jid or ".." in jid or "/" in jid:
+        raise ValueError(f"Invalid spreadsheet lab job id: {job_id!r}")
+    return f"{spreadsheet_lab_jobs_prefix()}/{jid}"
+
+
+def spreadsheet_lab_job_key(job_id: str) -> str:
+    return f"{spreadsheet_lab_job_prefix(job_id)}/job.json"
+
+
+def spreadsheet_lab_job_upload_key(job_id: str, filename: str) -> str:
+    name = filename.strip().lstrip("/").replace("\\", "/")
+    if not name or ".." in name:
+        raise ValueError(f"Invalid upload filename: {filename!r}")
+    return f"{spreadsheet_lab_job_prefix(job_id)}/upload/{name}"
+
+
+def spreadsheet_lab_job_parse_key(job_id: str) -> str:
+    return f"{spreadsheet_lab_job_prefix(job_id)}/parse.json"
+
+
+def spreadsheet_lab_job_table_key(job_id: str, table_id: str) -> str:
+    tid = table_id.strip().lower()
+    if not tid or ".." in tid or "/" in tid:
+        raise ValueError(f"Invalid table id: {table_id!r}")
+    return f"{spreadsheet_lab_job_prefix(job_id)}/tables/{tid}.json"
+
+
+def spreadsheet_lab_jobs_list_prefix() -> str:
+    return f"{spreadsheet_lab_jobs_prefix()}/"
+
+
+def spreadsheet_lab_job_tables_prefix(job_id: str) -> str:
+    return f"{spreadsheet_lab_job_prefix(job_id)}/tables/"
+
+
+def spreadsheet_lab_file_recipes_prefix() -> str:
+    return f"{spreadsheet_lab_prefix()}/recipes/files"
+
+
+def spreadsheet_lab_file_recipe_key(shape_hash: str) -> str:
+    sid = shape_hash.strip().lower()
+    if not sid or ".." in sid or "/" in sid:
+        raise ValueError(f"Invalid file recipe shape hash: {shape_hash!r}")
+    return f"{spreadsheet_lab_file_recipes_prefix()}/{sid}.json"
+
+
+def spreadsheet_lab_table_recipes_prefix() -> str:
+    return f"{spreadsheet_lab_prefix()}/recipes/tables"
+
+
+def spreadsheet_lab_table_recipe_key(shape_hash: str) -> str:
+    sid = shape_hash.strip().lower()
+    if not sid or ".." in sid or "/" in sid:
+        raise ValueError(f"Invalid table recipe shape hash: {shape_hash!r}")
+    return f"{spreadsheet_lab_table_recipes_prefix()}/{sid}.json"
+
+
+def spreadsheet_lab_reference_silver_entity_parquet_key(entity: str) -> str:
+    """Parquet key for a Spreadsheet Lab reference table — sibling to, and never
+    inside, ``spreadsheet_reference_silver_entity_parquet_key``'s ``silver/reference/``."""
+    return silver_entity_parquet_key(SPREADSHEET_LAB_REFERENCE_SOURCE, entity)

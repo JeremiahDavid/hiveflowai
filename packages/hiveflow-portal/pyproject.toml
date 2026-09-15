@@ -12,6 +12,7 @@ dependencies = [
     "pyyaml>=6.0.0",
     "pyarrow>=18.0.0",
     "fastapi>=0.115",
+    "python-multipart>=0.0.9",  # required by FastAPI's UploadFile/Form parsing (Spreadsheet Lab upload)
     "mangum>=0.17",
     "a2wsgi>=1.10",
     "uvicorn>=0.30",
@@ -28,6 +29,7 @@ namespaces = true
 [tool.setuptools.package-data]
 "hiveflow.dna.web" = ["static/*", "charts/*.yaml", "templates/**/*.html"]
 "hiveflow.dna.web.admin.onboarding.guides" = ["*.md"]
+"hiveflow.spreadsheet_lab.web" = ["static/*", "templates/**/*.html"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -1,0 +1,164 @@
+{% extends "layout.html" %}
+{% block title %}Spreadsheet Lab — {{ job.filename }}{% endblock %}
+{% block content %}
+  <div class="card">
+    <div class="row" style="justify-content: space-between;">
+      <div>
+        <h2 style="margin: 0;">{{ job.filename }}</h2>
+        <p class="muted" style="margin: 4px 0 0;">job {{ job.job_id }}</p>
+      </div>
+      <span class="badge {{ job.status }}">{{ job.status }}</span>
+    </div>
+    {% if job.auto_replayed %}
+      <p class="muted">
+        This file matched a saved recipe (id <code>{{ job.matched_file_recipe_id }}</code>) — table
+        extraction and cleaning were replayed automatically with no AI calls.
+      </p>
+      <form method="post" action="/jobs/{{ job.job_id }}/force-rerun">
+        <button type="submit">Force re-run (ignore the matched recipe)</button>
+      </form>
+    {% endif %}
+    {% if job.error %}
+      <p style="color:#b91c1c;">{{ job.error }}</p>
+    {% endif %}
+  </div>
+
+  {% if not tables %}
+    <div class="card"><p class="empty">Parsing — tables will appear here shortly.</p></div>
+  {% endif %}
+
+  {% for table in tables %}
+    <div class="card" data-table-id="{{ table.table_id }}">
+      <div class="row" style="justify-content: space-between;">
+        <div>
+          <strong>{{ table.table_id }}</strong>
+          <span class="muted">sheet: {{ table.sheet }}{% if table.entity_name %} &middot; {{ table.entity_name }}{% endif %}</span>
+        </div>
+        <span class="badge {{ table.status }}">{{ table.phase }} / {{ table.status }}</span>
+      </div>
+
+      {% if table.status == "processing" %}
+        <p class="muted">Agent is working on this table&hellip;</p>
+
+      {% elif table.phase == "extract" %}
+        {% if table.extract_proposal %}
+          {% set proposal = table.extract_proposal %}
+          <p><strong>{{ proposal.entity_name }}</strong> — {{ proposal.purpose }}</p>
+          <p class="muted">Grain: {{ proposal.grain }}</p>
+          {% if proposal.schema %}
+            <table class="schema">
+              <thead><tr><th>Column</th><th>Type</th><th>Description</th></tr></thead>
+              <tbody>
+                {% for col in proposal.schema %}
+                  <tr><td>{{ col.name }}</td><td>{{ col.type }}</td><td>{{ col.description or "" }}</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          {% endif %}
+          {% if proposal.corrected_region %}
+            <p class="muted">Region corrected from the original detected boundaries.</p>
+          {% endif %}
+          {% if proposal.notes %}
+            <ul class="muted">
+              {% for note in proposal.notes %}<li>{{ note }}</li>{% endfor %}
+            </ul>
+          {% endif %}
+        {% else %}
+          <p class="empty">Waiting on the agent&hellip;</p>
+        {% endif %}
+
+      {% elif table.phase == "clean" and table.status == "pending_shape_review" and table.clean_goal %}
+        <p class="muted">Proposed cleaned shape ({{ table.clean_goal.row_count }} row(s)):</p>
+        <table class="schema">
+          <thead><tr>{% for h in table.clean_goal.headers %}<th>{{ h }}</th>{% endfor %}</tr></thead>
+          <tbody>
+            {% for row in table.clean_goal.rows[:10] %}
+              <tr>{% for cell in row %}<td>{{ cell }}</td>{% endfor %}</tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% if table.clean_shape_notes %}
+          <ul class="muted">{% for note in table.clean_shape_notes %}<li>{{ note }}</li>{% endfor %}</ul>
+        {% endif %}
+
+      {% elif table.phase == "clean" and table.status == "pending_transform_review" %}
+        <p class="muted">Synthesized deterministic steps (confidence {{ table.transformation_confidence }}):</p>
+        <ul>
+          {% for step in (table.transformation.steps or []) %}
+            <li><code>{{ step.op }}</code>{% if step.key_column %} on <code>{{ step.key_column }}</code>{% endif %}</li>
+          {% endfor %}
+        </ul>
+        {% if table.transformation_notes %}
+          <ul class="muted">{% for note in table.transformation_notes %}<li>{{ note }}</li>{% endfor %}</ul>
+        {% endif %}
+
+      {% elif table.phase == "done" %}
+        <p>Materialized{% if table.silver %} to <code>{{ table.silver.silver_parquet_key }}</code>
+           ({{ table.silver.silver_row_count }} row(s)){% endif %}.</p>
+      {% endif %}
+
+      {% if table.feedback_history %}
+        <div style="margin-top: 12px;">
+          <p class="muted" style="margin-bottom:4px;">Feedback history ({{ table.attempt_count }} attempt(s)):</p>
+          {% for entry in table.feedback_history %}
+            <div class="feedback-entry">{{ entry.text }} <span class="muted">— {{ entry.at }}</span></div>
+          {% endfor %}
+        </div>
+      {% endif %}
+
+      {% if table.phase == "extract" and table.status in ("pending_review", "rejected_retry") %}
+        <div class="row">
+          <form method="post" action="/jobs/{{ job.job_id }}/tables/{{ table.table_id }}/approve">
+            <button class="primary" type="submit">Approve</button>
+          </form>
+          <form method="post" action="/jobs/{{ job.job_id }}/tables/{{ table.table_id }}/discard">
+            <button class="danger" type="submit">Discard</button>
+          </form>
+        </div>
+        <form method="post" action="/jobs/{{ job.job_id }}/tables/{{ table.table_id }}/reject" style="margin-top: 8px;">
+          <textarea name="feedback" placeholder="What's wrong with this table's shape? Be specific about rows/columns."></textarea>
+          <div class="row">
+            <button type="submit">Reject with feedback &amp; retry</button>
+          </div>
+        </form>
+
+      {% elif table.phase == "clean" and table.status == "pending_shape_review" %}
+        <div class="row">
+          <form method="post" action="/jobs/{{ job.job_id }}/tables/{{ table.table_id }}/approve-clean-shape">
+            <button class="primary" type="submit">Approve cleaned shape</button>
+          </form>
+        </div>
+        <form method="post" action="/jobs/{{ job.job_id }}/tables/{{ table.table_id }}/reject-clean-shape" style="margin-top: 8px;">
+          <textarea name="feedback" placeholder="What's wrong with the cleaned data?"></textarea>
+          <div class="row">
+            <button type="submit">Reject with feedback &amp; retry</button>
+          </div>
+        </form>
+
+      {% elif table.phase == "clean" and table.status == "pending_transform_review" %}
+        <div class="row">
+          <form method="post" action="/jobs/{{ job.job_id }}/tables/{{ table.table_id }}/approve-transformation">
+            <button class="primary" type="submit">Approve transformation</button>
+          </form>
+        </div>
+        <form method="post" action="/jobs/{{ job.job_id }}/tables/{{ table.table_id }}/reject-transformation" style="margin-top: 8px;">
+          <textarea name="feedback" placeholder="What's wrong with these deterministic steps?"></textarea>
+          <div class="row">
+            <button type="submit">Reject with feedback &amp; retry</button>
+          </div>
+        </form>
+      {% endif %}
+    </div>
+  {% endfor %}
+
+  {% if tables %}
+    <script>
+      (function () {
+        var hasProcessing = {{ (tables | selectattr("status", "equalto", "processing") | list | length > 0) | tojson }};
+        if (hasProcessing) {
+          setTimeout(function () { window.location.reload(); }, 4000);
+        }
+      })();
+    </script>
+  {% endif %}
+{% endblock %}

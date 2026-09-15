@@ -501,6 +501,33 @@ def provisioning_stack_module_name() -> str:
     return "provisioning_stack"
 
 
+def spreadsheet_lab_stack_name(environment: str) -> str:
+    """Sandbox stack for the Spreadsheet Lab rebuild — single-tenant, independent
+    of every company's IngestStack/DnaStack (see docs/spreadsheet-lab.md)."""
+    return f"SpreadsheetLabStack-{environment}"
+
+
+def spreadsheet_lab_stack_module_name() -> str:
+    return "spreadsheet_lab_stack"
+
+
+def spreadsheet_lab_web_api_export_name(environment: str) -> str:
+    return f"hiveflow-spreadsheet-lab-{environment}-web-api-id"
+
+
+def get_spreadsheet_lab_config(platform_env_config: dict[str, Any]) -> dict[str, Any]:
+    """Spreadsheet Lab sandbox settings from ``platform.environments.<env>.ui.spreadsheet_lab``."""
+    ui_cfg = get_ui_config(platform_env_config)
+    lab_cfg = ui_cfg.get("spreadsheet_lab", {})
+    if not isinstance(lab_cfg, dict):
+        return {}
+    return lab_cfg
+
+
+def is_spreadsheet_lab_enabled(platform_env_config: dict[str, Any]) -> bool:
+    return bool(get_spreadsheet_lab_config(platform_env_config).get("enabled", False))
+
+
 def get_platform_config(*, path: Path | None = None) -> dict[str, Any]:
     config = load_project_config(path)
     platform_cfg = config.get("platform", {})
