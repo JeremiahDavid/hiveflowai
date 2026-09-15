@@ -15,7 +15,7 @@ from aws_cdk import (
 )
 from constructs import Construct
 
-from iam_grants import grant_athena_query, grant_glue_catalog_sync
+from iam_grants import grant_athena_query, grant_bedrock_semantic_access, grant_glue_catalog_sync
 from lambda_bundle import HiveFlowLambdaRuntime, hiveflow_lambda_runtime
 
 SOURCE_DOCUMENTATION_BUCKET_NAME = "hiveflowai-source-documentation"
@@ -113,24 +113,6 @@ class DnaStack(Stack):
             pack_id=pack_id,
         )
 
-        from spreadsheet_pipeline import create_spreadsheet_pipeline
-
-        spreadsheet_resources = create_spreadsheet_pipeline(
-            self,
-            "Spreadsheet",
-            company=company,
-            environment=environment,
-            data_bucket=data_bucket,
-            lambda_runtime=lambda_runtime,
-            common_env={
-                "HIVEFLOW_COMPANY": company,
-                "HIVEFLOW_ENVIRONMENT": environment,
-                "HIVEFLOW_S3_BUCKET": data_bucket.bucket_name,
-                "HIVEFLOW_BEDROCK_MODEL_ID": "us.anthropic.claude-haiku-4-5-20251001-v1:0",
-            },
-            grant_bedrock=self._grant_bedrock_semantic_access,
-        )
-
         self._seed_governance_on_deploy(
             dna_publish_fn,
             company=company,
@@ -163,16 +145,6 @@ class DnaStack(Stack):
             "DnaRefreshStateMachineName",
             value=resources["state_machine"].state_machine_name,
         )
-        CfnOutput(
-            self,
-            "SpreadsheetAnalyzeStateMachineArn",
-            value=spreadsheet_resources["state_machine"].state_machine_arn,
-        )
-        CfnOutput(
-            self,
-            "SpreadsheetAnalyzeStateMachineName",
-            value=spreadsheet_resources["state_machine"].state_machine_name,
-        )
 
     def _apply_cost_allocation_tags(self, company: str, environment: str) -> None:
         from hiveflow.project_config import cost_allocation_tags
@@ -194,21 +166,34 @@ class DnaStack(Stack):
         bucket/Athena/Step Functions; it assumes this role per request. Trust is
         pinned to the shared serve role by ARN so no cross-stack ref is needed.
         """
+        from hiveflow.project_config import (
+            agent_pipelines_role_name,
+            spreadsheet_engine_state_machine_name,
+        )
+
         company_slug = company.strip().lower()
         env_slug = environment.strip().lower()
         serve_role_arn = (
             f"arn:aws:iam::{self.account}:role/hiveflow-portal-{env_slug}-serve-role"
+        )
+        agent_pipelines_role_arn = (
+            f"arn:aws:iam::{self.account}:role/{agent_pipelines_role_name(env_slug)}"
         )
         role = iam.Role(
             self,
             "PortalTenantRole",
             role_name=f"hiveflow-portal-tenant-{company_slug}-{env_slug}",
             assumed_by=iam.AccountPrincipal(self.account).with_conditions(
-                {"ArnEquals": {"aws:PrincipalArn": serve_role_arn}}
+                {
+                    "ArnEquals": {
+                        "aws:PrincipalArn": [serve_role_arn, agent_pipelines_role_arn]
+                    }
+                }
             ),
             description=(
                 f"Data-plane access for portal client company {company_slug} "
-                f"({env_slug}); assumed per request by the shared portal Lambda"
+                f"({env_slug}); assumed per request by the shared portal Lambda "
+                f"and by global agent-pipeline Lambdas (e.g. the Spreadsheet Engine)"
             ),
             max_session_duration=Duration.hours(1),
         )
@@ -217,12 +202,21 @@ class DnaStack(Stack):
         grant_athena_query(role, company=company, environment=environment)
         source_docs_gold_fn.grant_invoke(role)
 
+        # Starting/watching an execution of the shared, global Spreadsheet
+        # Engine pipeline (GlobalAgentPipelinesStack) happens under this same
+        # assumed tenant role — the portal request that kicks it off is already
+        # running with these credentials installed — so its fixed state
+        # machine name is granted here alongside the per-company `{company}-
+        # {env}-*` pattern used by this company's own DNA/ingest pipelines.
+        shared_spreadsheet_state_machine = spreadsheet_engine_state_machine_name(env_slug)
         role.add_to_policy(
             iam.PolicyStatement(
                 actions=["states:StartExecution"],
                 resources=[
                     f"arn:aws:states:{self.region}:{self.account}:stateMachine:"
-                    f"{company_slug}-{env_slug}-*"
+                    f"{company_slug}-{env_slug}-*",
+                    f"arn:aws:states:{self.region}:{self.account}:stateMachine:"
+                    f"{shared_spreadsheet_state_machine}",
                 ],
             )
         )
@@ -230,6 +224,8 @@ class DnaStack(Stack):
             iam.PolicyStatement(
                 actions=["states:DescribeExecution", "states:StopExecution"],
                 resources=[
+                    f"arn:aws:states:{self.region}:{self.account}:execution:"
+                    f"{shared_spreadsheet_state_machine}:*",
                     f"arn:aws:states:{self.region}:{self.account}:execution:"
                     f"{company_slug}-{env_slug}-*:*"
                 ],
@@ -378,19 +374,5 @@ class DnaStack(Stack):
         return gold_fn
 
     def _grant_bedrock_semantic_access(self, fn: _lambda.Function) -> None:
-        """Semantic init LLM column tagging + Titan embeddings for doc retrieval."""
-        fn.add_to_role_policy(
-            iam.PolicyStatement(
-                actions=[
-                    "bedrock:InvokeModel",
-                    "bedrock:InvokeModelWithResponseStream",
-                    "bedrock:Converse",
-                    "bedrock:ConverseStream",
-                    "aws-marketplace:ViewSubscriptions",
-                    "aws-marketplace:Subscribe",
-                    "aws-marketplace:Unsubscribe",
-                ],
-                resources=["*"],
-            )
-        )
+        grant_bedrock_semantic_access(fn)
 

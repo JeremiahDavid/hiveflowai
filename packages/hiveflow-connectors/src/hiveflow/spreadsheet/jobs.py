@@ -54,7 +54,19 @@ def _now_iso() -> str:
 
 
 def _bucket() -> str:
-    return os.getenv("HIVEFLOW_S3_BUCKET", "").strip()
+    raw = os.getenv("HIVEFLOW_S3_BUCKET", "").strip()
+    if not raw:
+        return ""
+    # pytest sets PYTEST_CURRENT_TEST for the duration of every running test,
+    # regardless of how it was invoked or which conftest.py (if any) applied —
+    # unlike env-clearing fixtures, this can't be bypassed by scoping pytest to
+    # a package with its own [tool.pytest.ini_options] (which stops pytest's
+    # rootdir/conftest search before it reaches a repo-root conftest.py). A
+    # leftover HIVEFLOW_S3_BUCKET in the ambient shell must never let a test
+    # silently write real job/upload/catalog records to production S3.
+    if os.getenv("PYTEST_CURRENT_TEST") and not os.getenv("HIVEFLOW_ALLOW_TEST_S3"):
+        return ""
+    return raw
 
 
 def _data_dir() -> Path:
@@ -122,6 +134,42 @@ def _read_bytes(key: str) -> bytes:
         return response["Body"].read()
     path = prefix_path(_data_dir(), key)
     return path.read_bytes()
+
+
+def _delete_prefix(prefix: str, *, keep_keys: frozenset[str] = frozenset()) -> None:
+    """Delete every object under ``prefix``, except any key in ``keep_keys``."""
+    bucket = _bucket()
+    if bucket:
+        client = s3_client()
+        paginator = client.get_paginator("list_objects_v2")
+        keys: list[str] = []
+        for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+            for item in page.get("Contents") or []:
+                key = str(item.get("Key") or "")
+                if key and key not in keep_keys:
+                    keys.append(key)
+        for i in range(0, len(keys), 1000):
+            batch = keys[i : i + 1000]
+            client.delete_objects(
+                Bucket=bucket,
+                Delete={"Objects": [{"Key": k} for k in batch], "Quiet": True},
+            )
+        return
+    root = prefix_path(_data_dir(), prefix)
+    if not root.exists():
+        return
+    for path in sorted(root.rglob("*"), reverse=True):
+        if path.is_dir():
+            continue
+        key = f"{prefix.rstrip('/')}/{path.relative_to(root).as_posix()}"
+        if key in keep_keys:
+            continue
+        path.unlink(missing_ok=True)
+    for path in sorted((p for p in root.rglob("*") if p.is_dir()), reverse=True):
+        try:
+            path.rmdir()
+        except OSError:
+            pass
 
 
 def save_job(job: dict[str, Any]) -> dict[str, Any]:
@@ -1193,6 +1241,12 @@ def approve_transformation(
     if not table:
         raise ValueError(f"Unknown table {table_id!r} for job {job_id!r}")
     transformation = table.get("transformation") or {}
+    # Some transformations reach here without ever going through approve_clean_shape's
+    # full-data test (e.g. reused verbatim from a prior catalog entry), so test again
+    # here — the last point before "Approve Table" trusts this transformation blindly.
+    table["transformation_notes"] = _append_full_data_test_notes(
+        job_id, table_id, table, transformation, list(table.get("transformation_notes") or [])
+    )
     table["transformation_status"] = "approved"
     table["transformation_approved_at"] = _now_iso()
     table["transformation_approved_by"] = username
@@ -1289,6 +1343,7 @@ def reject_transformation(
     notes = list(synthesized.get("transformation_notes") or [])
     if feedback:
         notes.append(f"Re-synthesized after rejection: {feedback}")
+    notes = _append_full_data_test_notes(job_id, table_id, table, transformation, notes)
     updates = {
         "transformation": transformation,
         "transformation_status": "pending_review",
@@ -1360,6 +1415,28 @@ def _load_table_sample_rows(job_id: str, table_id: str) -> tuple[list[str], list
     return headers, rows
 
 
+def _append_full_data_test_notes(
+    job_id: str,
+    table_id: str,
+    table: dict[str, Any],
+    transformation: dict[str, Any],
+    notes: list[str],
+) -> list[str]:
+    """Run the transformation against every row of the sheet and record the outcome in
+    `notes`, so a reviewer sees it before approving rather than the approval failing."""
+    check = _test_transformation_for_job(job_id, table_id, {**table, "transformation": transformation})
+    if not check or not check.get("tested"):
+        return notes
+    issues = list(check.get("issues") or [])
+    row_count = check.get("row_count", 0)
+    if issues:
+        notes.append(f"Tested against all {row_count} source row(s) before proposing — found issues:")
+        notes.extend(issues)
+    else:
+        notes.append(f"Tested against all {row_count} source row(s) — no issues found.")
+    return notes
+
+
 def approve_clean_shape(
     job_id: str,
     table_id: str,
@@ -1393,6 +1470,10 @@ def approve_clean_shape(
     if not transformation.get("input_shape"):
         transformation["input_shape"] = input_shape
 
+    transformation_notes = _append_full_data_test_notes(
+        job_id, table_id, table, transformation, list(synthesized.get("transformation_notes") or [])
+    )
+
     clean_goal["final"] = True
     updates = {
         "clean_goal": clean_goal,
@@ -1402,7 +1483,7 @@ def approve_clean_shape(
         "transformation": transformation,
         "transformation_status": synthesized.get("transformation_status") or "pending_review",
         "transformation_confidence": synthesized.get("transformation_confidence") or 0,
-        "transformation_notes": list(synthesized.get("transformation_notes") or []),
+        "transformation_notes": transformation_notes,
         "transformation_drift": list(synthesized.get("transformation_drift") or []),
         "induction": synthesized.get("induction") or {},
     }
@@ -1485,7 +1566,11 @@ def reject_job(
     if is_discarded_job(job):
         return job
     report = load_report(job_id) or {}
-    for item in report.get("tables") or []:
+    tables = report.get("tables") or []
+    has_approved_table = any(
+        isinstance(item, dict) and str(item.get("status") or "") == "approved" for item in tables
+    )
+    for item in tables:
         if not isinstance(item, dict):
             continue
         table_id = str(item.get("table_id") or "").strip()
@@ -1496,7 +1581,17 @@ def reject_job(
     job["status"] = "discarded"
     job["discarded_at"] = _now_iso()
     job["discarded_by"] = username
-    return save_job(job)
+    saved = save_job(job)
+    if not has_approved_table:
+        # No catalog entry can reference this job's upload as last_upload_job_id
+        # (that's only set on table approval), so its workbook copy and derived
+        # parse/profile/table artifacts are safe to purge. job.json itself is
+        # kept as a lightweight discarded-job record.
+        _delete_prefix(
+            f"{spreadsheet_engine_job_prefix(job_id)}/",
+            keep_keys=frozenset({spreadsheet_engine_job_key(job_id)}),
+        )
+    return saved
 
 
 def reject_table(
@@ -1524,9 +1619,8 @@ def reject_table(
     )
 
 
-def _materialize_table_for_job(job_id: str, table_id: str, table: dict[str, Any]) -> dict[str, Any] | None:
-    from hiveflow.spreadsheet.materialize import materialization_payload, materialize_approved_table
-
+def _load_job_and_upload(job_id: str) -> tuple[dict[str, Any], dict[str, Any], bytes] | None:
+    """Load the job record, parse payload, and raw workbook bytes for full-data operations."""
     job = load_job(job_id) or {}
     parse_payload = _read_json(spreadsheet_engine_job_parse_key(job_id))
     if not parse_payload:
@@ -1537,6 +1631,16 @@ def _materialize_table_for_job(job_id: str, table_id: str, table: dict[str, Any]
         upload_body = _read_bytes(upload_key)
     except Exception:  # noqa: BLE001
         return None
+    return job, parse_payload, upload_body
+
+
+def _materialize_table_for_job(job_id: str, table_id: str, table: dict[str, Any]) -> dict[str, Any] | None:
+    from hiveflow.spreadsheet.materialize import materialization_payload, materialize_approved_table
+
+    loaded = _load_job_and_upload(job_id)
+    if not loaded:
+        return None
+    job, parse_payload, upload_body = loaded
     result = materialize_approved_table(
         job=job,
         table={**table, "table_id": table_id},
@@ -1546,6 +1650,30 @@ def _materialize_table_for_job(job_id: str, table_id: str, table: dict[str, Any]
     if not result:
         return None
     return materialization_payload(result, materialized_at=_now_iso())
+
+
+def _test_transformation_for_job(
+    job_id: str, table_id: str, table: dict[str, Any]
+) -> dict[str, Any] | None:
+    """Dry-run a freshly synthesized transformation against the FULL sheet, before it is
+    ever shown to the operator as ready for approval — not just the sample used to
+    synthesize it. Catches things like a cast step tripping over a stray text value
+    (e.g. "Included") in a column that looked numeric in the sample."""
+    from hiveflow.spreadsheet.materialize import test_transformation_against_full_data
+
+    loaded = _load_job_and_upload(job_id)
+    if not loaded:
+        return None
+    job, parse_payload, upload_body = loaded
+    try:
+        return test_transformation_against_full_data(
+            job=job,
+            table={**table, "table_id": table_id},
+            parse_payload=parse_payload,
+            upload_body=upload_body,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"tested": False, "row_count": 0, "issues": [f"Full-data test failed: {exc}"]}
 
 
 def approve_table(job_id: str, table_id: str, *, username: str = "") -> dict[str, Any]:
@@ -1566,9 +1694,20 @@ def approve_table(job_id: str, table_id: str, *, username: str = "") -> dict[str
     if steps and transform_status != "approved":
         raise ValueError("Approve the transformation before approving the table.")
 
-    table["status"] = "approved"
-    table["approved_at"] = _now_iso()
-    table["approved_by"] = username
+    approved_at = _now_iso()
+    pending_table = {**table, "status": "approved", "approved_at": approved_at, "approved_by": username}
+
+    # Materialize against the full sheet before persisting anything as approved: casting
+    # is now tolerant of bad values (see transform._cast_value), so this should never raise
+    # from data content, but if it does for some other reason (e.g. storage), the table
+    # should stay un-approved rather than being marked approved with no silver output.
+    job = load_job(job_id) or {}
+    try:
+        silver_materialization = _materialize_table_for_job(job_id, table_id, pending_table)
+    except Exception as exc:  # noqa: BLE001
+        raise ValueError(f"Could not materialize this table: {exc}") from exc
+
+    table = pending_table
     _write_json(spreadsheet_engine_job_table_key(job_id, table_id), table)
     report = load_report(job_id) or {"tables": []}
     tables = []
@@ -1579,8 +1718,6 @@ def approve_table(job_id: str, table_id: str, *, username: str = "") -> dict[str
             tables.append(item)
     report["tables"] = tables
     _write_json(spreadsheet_engine_job_report_key(job_id), report)
-    job = load_job(job_id) or {}
-    silver_materialization = _materialize_table_for_job(job_id, table_id, table)
     entry = save_catalog_entry(
         job_id,
         table_id,

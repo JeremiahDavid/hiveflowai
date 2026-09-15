@@ -30,6 +30,8 @@ from hiveflow.project_config import (
     get_dna_config,
     get_platform_config,
     get_ui_config,
+    global_agent_pipelines_stack_module_name,
+    global_agent_pipelines_stack_name,
     global_dns_stack_module_name,
     global_dns_stack_name,
     global_dna_stack_module_name,
@@ -161,6 +163,9 @@ if cdk_scope in ("all", "platform") and platform_enabled:
     global_ui_module = importlib.import_module(f"stacks.{global_ui_stack_module_name()}")
     global_dns_module = importlib.import_module(f"stacks.{global_dns_stack_module_name()}")
     global_dna_module = importlib.import_module(f"stacks.{global_dna_stack_module_name()}")
+    global_agent_pipelines_module = importlib.import_module(
+        f"stacks.{global_agent_pipelines_stack_module_name()}"
+    )
     portal_module = importlib.import_module(f"stacks.{portal_stack_module_name()}")
     platform_admin_module = importlib.import_module(f"stacks.{platform_admin_stack_module_name()}")
     provisioning_module = importlib.import_module(f"stacks.{provisioning_stack_module_name()}")
@@ -201,6 +206,17 @@ if cdk_scope in ("all", "platform") and platform_enabled:
                 region=region,
             ),
             description=f"Global DNA jobs (source documentation) for {environment}",
+        )
+
+        global_agent_pipelines_module.GlobalAgentPipelinesStack(
+            app,
+            global_agent_pipelines_stack_name(environment),
+            environment=environment,
+            env=cdk.Environment(
+                account=account,
+                region=region,
+            ),
+            description=f"Shared multi-tenant AI-agent pipelines (Spreadsheet Engine) for {environment}",
         )
 
         global_ui_stack = None

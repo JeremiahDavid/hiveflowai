@@ -1,15 +1,25 @@
 # Spreadsheet Engine interpret/propose — plain zip Lambda, no Node/claude CLI.
-# = the "full" Lambda deps plus hiveflow-spreadsheet-parser's own stack.
--r requirements.txt
+#
+# Deliberately NOT `-r requirements.txt`: that file pulls in pyarrow (~140MB,
+# needed only by hiveflow.storage.parquet for the lake write path, which
+# these two Lambdas never call — spreadsheet.materialize imports it lazily
+# from a different handler), lxml/cryptography/httpx/intuit-oauth (BC/QBO
+# connector auth, unrelated here), and jinja2/werkzeug/aws-wsgi (portal WSGI).
+# Bundling all of that plus pandas/numpy pushed the combined zip past
+# Lambda's 250MB unzipped limit. List only what interpret/propose actually
+# import, at runtime, transitively.
+boto3>=1.35.0
+botocore>=1.35.0
+pyyaml>=6.0.0
+typing_extensions>=4.12.0
+openpyxl>=3.1.5
 
 # hiveflow-spreadsheet-parser deterministic layer (grid detection, table extraction).
 pandas>=2.2
 python-calamine>=0.2
 pydantic>=2.7
 
-# hiveflow_core is still imported for plain helpers (e.g. json_default) shared with
-# hiveflow_spreadsheet_parser.tools; its own package unconditionally imports
-# claude_agent_sdk (see hiveflow_core/__init__.py), so it stays a dependency even
-# though nothing here calls into the Claude Agent SDK / claude CLI anymore — this
-# is a pure-Python package with no Node.js requirement.
-claude-agent-sdk>=0.2.0
+# hiveflow_core is imported for plain helpers (json_default, SourceInfo) shared
+# with hiveflow_spreadsheet_parser.tools. Its agent/bedrock submodules (which need
+# claude_agent_sdk — a large package that vendors the Node.js `claude` CLI binary)
+# are loaded lazily by hiveflow_core/__init__.py, so nothing here pulls that in.

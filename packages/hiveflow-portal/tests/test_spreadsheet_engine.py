@@ -81,7 +81,7 @@ def test_state_machine_arn_uses_sts_account(monkeypatch: pytest.MonkeyPatch) -> 
     from hiveflow.dna.web.portal.spreadsheet_engine.service import _state_machine_arn
 
     arn = _state_machine_arn(company="POC", environment="dev")
-    assert arn == "arn:aws:states:us-east-2:123456789012:stateMachine:poc-dev-spreadsheet"
+    assert arn == "arn:aws:states:us-east-2:123456789012:stateMachine:platform-dev-spreadsheet"
 
 
 def test_proposal_review_renders_table_preview() -> None:
@@ -237,7 +237,9 @@ def test_proposal_review_renders_table_chat(tmp_path: Path, portal_env: None) ->
     assert "spreadsheet-reject-label" not in reject_chunk
     assert "spreadsheet-reject-submit" in reject_chunk
     assert chat_pos > html.find('id="spreadsheet-table-analysis"')
-    assert "Approve table" in html
+    # Only the step's own approval shows while clean shape is still under review —
+    # no redundant disabled "Approve table" button lower on the page.
+    assert ">Approve table<" not in html
     assert 'role="tabpanel">' in html
     assert "spreadsheet-engine-panel-catalog" in html
     assert "Recent workbooks" not in html
@@ -374,7 +376,7 @@ def test_transformation_panel_renders_in_proposal_review() -> None:
     assert "Approved AI cleaned (goal)" in html
     assert "Deterministic transform output" in html
     assert "spreadsheet-stage-stepper" in html
-    assert "Transform review" in html
+    assert "Transform review" not in html
     assert "spreadsheet-transform-head-meta" in html
     assert "via oracle" in html
     assert "Confidence 40%" in html
@@ -623,15 +625,17 @@ def test_proposal_review_hides_chat_until_rejected() -> None:
     assert "spreadsheet-reject-box" in html
     assert "spreadsheet-reject-submit" in html
     assert "spreadsheet-reject-label" not in html
-    assert "spreadsheet-table-head-reject" in html
-    head_pos = html.find("spreadsheet-table-head-reject")
+    # The only way to discard the whole table is the little "x" on its chip.
+    assert "spreadsheet-table-head-reject" not in html
+    assert "spreadsheet-table-chip-reject" in html
+    chip_pos = html.find("spreadsheet-table-chip-reject")
     source_pos = html.find("Source data preview")
-    assert head_pos != -1 and source_pos != -1
-    assert head_pos < source_pos
+    assert chip_pos != -1 and source_pos != -1
+    assert chip_pos < source_pos
     assert 'name="action" value="reject_table"' in html
-    head_form = html[head_pos : html.find("</form>", head_pos)]
-    assert "<textarea" not in head_form
-    assert "Reject" in head_form
+    chip_form = html[chip_pos : html.find("</form>", chip_pos)]
+    assert "<textarea" not in chip_form
+    assert "&times;" in chip_form
     assert 'id="spreadsheet-table-chat"' not in html
     assert "Cleaned preview" in html
     assert 'id="spreadsheet-cleaned-preview"' in html
@@ -675,7 +679,7 @@ def test_discarded_tables_are_hidden_from_proposals() -> None:
     )
     assert "customers" in html
     assert "noise_table" not in html
-    assert "1 proposed table" in html
+    assert html.count('class="spreadsheet-table-chip-link"') == 1
 
 
 def test_proposals_keep_prior_uploads_and_navigate_files() -> None:
@@ -713,9 +717,11 @@ def test_proposals_keep_prior_uploads_and_navigate_files() -> None:
     assert "customers.xlsx" in html
     assert "job_id=job-old" in html
     assert "job_id=job-new" in html
-    assert "Previous file" in html or "Next file" in html
+    # The current-file summary section (with its own "Reject file" button) is gone —
+    # the file chip's own "x" and "Reject all files" are the only file-level reject controls.
+    assert "spreadsheet-job-summary" not in html
+    assert "Reject file" not in html
     assert 'name="action" value="reject_job"' in html
-    assert "Reject file" in html
     assert "vendors" in html
     assert "aria-label=\"Proposed tables\"" in html
 

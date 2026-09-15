@@ -27,10 +27,21 @@ class SilverMaterialization:
     parquet_key: str
     location: str
     row_count: int
+    issues: list[str]
 
 
 def _bucket() -> str:
-    return os.getenv("HIVEFLOW_S3_BUCKET", "").strip()
+    raw = os.getenv("HIVEFLOW_S3_BUCKET", "").strip()
+    if not raw:
+        return ""
+    # See hiveflow.spreadsheet.jobs._bucket for why this guard exists: a
+    # leftover HIVEFLOW_S3_BUCKET in the ambient shell must never let a test
+    # silently write real materialized silver data to production S3, and
+    # PYTEST_CURRENT_TEST (set by pytest for every running test) is immune to
+    # conftest.py discovery/rootdir quirks that an env-clearing fixture is not.
+    if os.getenv("PYTEST_CURRENT_TEST") and not os.getenv("HIVEFLOW_ALLOW_TEST_S3"):
+        return ""
+    return raw
 
 
 def _data_dir() -> Path:
@@ -55,7 +66,12 @@ def _rows_to_dicts(headers: list[str], rows: list[list[Any]]) -> list[dict[str, 
     return out
 
 
-def _write_reference_silver_parquet(entity_name: str, rows: list[dict[str, Any]]) -> SilverMaterialization:
+def _write_reference_silver_parquet(
+    entity_name: str,
+    rows: list[dict[str, Any]],
+    *,
+    issues: list[str] | None = None,
+) -> SilverMaterialization:
     entity = _normalize_entity_name(entity_name)
     parquet_key = spreadsheet_reference_silver_entity_parquet_key(entity)
     normalized_rows = normalize_silver_rows(rows)
@@ -77,17 +93,24 @@ def _write_reference_silver_parquet(entity_name: str, rows: list[dict[str, Any]]
         parquet_key=parquet_key,
         location=location,
         row_count=len(normalized_rows),
+        issues=list(issues or []),
     )
 
 
-def materialize_approved_table(
+def _run_transformation_over_full_data(
     *,
     job: dict[str, Any],
     table: dict[str, Any],
     parse_payload: dict[str, Any],
     upload_body: bytes,
-) -> SilverMaterialization | None:
-    """Extract workbook rows, apply the approved transformation, and write silver/reference parquet."""
+) -> tuple[list[list[Any]], list[str], list[str]] | None:
+    """Extract every workbook row for the table and apply its transformation.
+
+    Shared by materialize (which writes the result) and the pre-approval dry
+    run (which only wants to know whether it would succeed and what it would
+    warn about) — both need to run against the FULL row set, not a sample,
+    since a bad value anywhere in the sheet can only surface here.
+    """
     table_id = str(table.get("table_id") or "")
     parse_table = None
     for item in parse_payload.get("tables") or []:
@@ -122,12 +145,60 @@ def materialize_approved_table(
         )
 
     rows = list(extracted.get("rows") or [])
-    out_rows, out_headers = apply_transformation(rows, raw_headers, transformation)
+    issues: list[str] = []
+    out_rows, out_headers = apply_transformation(rows, raw_headers, transformation, issues=issues)
+    return out_rows, out_headers, issues
+
+
+def test_transformation_against_full_data(
+    *,
+    job: dict[str, Any],
+    table: dict[str, Any],
+    parse_payload: dict[str, Any],
+    upload_body: bytes,
+) -> dict[str, Any]:
+    """Dry-run the table's transformation over the full sheet before it is proposed for approval.
+
+    Returns row/issue counts so the caller can warn the operator up front —
+    this is what lets approval be a no-surprises confirmation instead of the
+    first time the transformation ever sees the whole dataset.
+    """
+    result = _run_transformation_over_full_data(
+        job=job, table=table, parse_payload=parse_payload, upload_body=upload_body
+    )
+    if result is None:
+        return {"tested": False, "row_count": 0, "issues": []}
+    out_rows, out_headers, issues = result
+    return {
+        "tested": True,
+        "row_count": len(out_rows),
+        "output_headers": out_headers,
+        "issues": issues,
+    }
+
+
+def materialize_approved_table(
+    *,
+    job: dict[str, Any],
+    table: dict[str, Any],
+    parse_payload: dict[str, Any],
+    upload_body: bytes,
+) -> SilverMaterialization | None:
+    """Extract workbook rows, apply the approved transformation, and write silver/reference parquet."""
+    table_id = str(table.get("table_id") or "")
+    result = _run_transformation_over_full_data(
+        job=job, table=table, parse_payload=parse_payload, upload_body=upload_body
+    )
+    if result is None:
+        return None
+    out_rows, out_headers, issues = result
     if not out_headers:
         return None
 
     entity_name = str(table.get("entity_name") or table_id)
-    return _write_reference_silver_parquet(entity_name, _rows_to_dicts(out_headers, out_rows))
+    return _write_reference_silver_parquet(
+        entity_name, _rows_to_dicts(out_headers, out_rows), issues=issues
+    )
 
 
 def materialization_payload(result: SilverMaterialization, *, materialized_at: str) -> dict[str, Any]:
@@ -138,4 +209,5 @@ def materialization_payload(result: SilverMaterialization, *, materialized_at: s
         "silver_parquet_location": result.location,
         "silver_row_count": result.row_count,
         "silver_materialized_at": materialized_at,
+        "silver_cast_issues": list(result.issues),
     }

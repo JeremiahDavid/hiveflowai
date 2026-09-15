@@ -1,8 +1,9 @@
-"""Shared IAM grant helpers for Glue catalog sync and Athena query access.
+"""Shared IAM grant helpers for Glue catalog sync, Athena, and Bedrock access.
 
 Plain functions, not a construct — they only attach policies to an existing
 principal and create no new resources, so keeping them out of the stack
-classes has zero CloudFormation impact (used by IngestStack and DnaStack).
+classes has zero CloudFormation impact (used by IngestStack, DnaStack, and
+GlobalAgentPipelinesStack).
 """
 
 from __future__ import annotations
@@ -113,5 +114,24 @@ def grant_athena_query(
                 f"arn:aws:s3:::{results_bucket}",
                 f"arn:aws:s3:::{results_bucket}/*",
             ],
+        ),
+    )
+
+
+def grant_bedrock_semantic_access(principal: iam.IRole | _lambda.Function) -> None:
+    """Semantic init LLM column tagging + Titan embeddings for doc retrieval."""
+    _attach_policy(
+        principal,
+        iam.PolicyStatement(
+            actions=[
+                "bedrock:InvokeModel",
+                "bedrock:InvokeModelWithResponseStream",
+                "bedrock:Converse",
+                "bedrock:ConverseStream",
+                "aws-marketplace:ViewSubscriptions",
+                "aws-marketplace:Subscribe",
+                "aws-marketplace:Unsubscribe",
+            ],
+            resources=["*"],
         ),
     )

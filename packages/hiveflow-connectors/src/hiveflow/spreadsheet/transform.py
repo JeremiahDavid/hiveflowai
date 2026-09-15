@@ -318,45 +318,63 @@ def _eval_expr(expr: str, row_data: dict[str, Any]) -> Any:
     return parsed
 
 
-def _cast_value(value: Any, target_type: str) -> Any:
+def _cast_value(value: Any, target_type: str) -> tuple[Any, bool]:
+    """Cast a single cell to target_type. Never raises — returns (value, ok).
+
+    ok is False when the raw text could not be parsed as target_type, in which
+    case the original text is returned so the caller can decide how to handle
+    the column (see apply_transformation's "cast" op).
+    """
     if value is None or value is _NULL_SENTINEL:
-        return None
+        return None, True
     text = str(value).strip()
     if not text:
-        return None
+        return None, True
     kind = target_type.strip().lower()
     if kind == "string":
-        return text
+        return text, True
     if kind == "number":
         cleaned = text.replace(",", "").replace("$", "")
-        return float(cleaned) if "." in cleaned else int(cleaned)
+        try:
+            return (float(cleaned) if "." in cleaned else int(cleaned)), True
+        except ValueError:
+            return text, False
     if kind == "boolean":
-        return text.lower() in {"true", "yes", "1", "y"}
+        return text.lower() in {"true", "yes", "1", "y"}, True
     if kind == "date":
         for fmt in ("%Y-%m-%d", "%m/%d/%Y", "%d/%m/%Y"):
             try:
-                return datetime.strptime(text, fmt).date().isoformat()
+                return datetime.strptime(text, fmt).date().isoformat(), True
             except ValueError:
                 continue
-        return text
+        return text, False
     if kind == "datetime":
         for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d"):
             try:
-                return datetime.strptime(text, fmt).isoformat()
+                return datetime.strptime(text, fmt).isoformat(), True
             except ValueError:
                 continue
-        return text
+        return text, False
     if kind in {"currency", "email", "unknown"}:
-        return text
-    return text
+        return text, True
+    return text, True
 
 
 def apply_transformation(
     rows: list[list[Any]],
     headers: list[str],
     spec: dict[str, Any],
+    *,
+    issues: list[str] | None = None,
 ) -> tuple[list[list[Any]], list[str]]:
-    """Apply transformation steps to row data; return transformed rows and output headers."""
+    """Apply transformation steps to row data; return transformed rows and output headers.
+
+    Never raises on bad cell data — a "cast" step that hits values it cannot
+    parse (e.g. a status column that has one row saying "Included") falls back
+    to leaving that whole column as text rather than crashing or producing a
+    mixed-type column that would later fail to write as Parquet. When `issues`
+    is passed, a human-readable note is appended for each column that fell back.
+    """
     working_headers = list(headers)
     working_rows = [list(row) for row in rows]
 
@@ -388,8 +406,23 @@ def apply_transformation(
                     )
                 if col_index < 0:
                     continue
-                for row in working_rows:
-                    row[col_index] = _cast_value(row[col_index], str(col_type))
+                cast_results = [_cast_value(row[col_index], str(col_type)) for row in working_rows]
+                if all(ok for _value, ok in cast_results):
+                    for row, (value, _ok) in zip(working_rows, cast_results):
+                        row[col_index] = value
+                else:
+                    bad_values = sorted(
+                        {
+                            str(row[col_index])
+                            for row, (_value, ok) in zip(working_rows, cast_results)
+                            if not ok
+                        }
+                    )[:3]
+                    if issues is not None:
+                        issues.append(
+                            f"Column '{col_name}' has values that are not valid {col_type} "
+                            f"(e.g. {', '.join(bad_values)}); kept as text instead of casting"
+                        )
         elif op == "group_rows":
             key_column = str(step.get("key_column") or "").strip()
             if key_column:

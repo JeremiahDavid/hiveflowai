@@ -58,7 +58,7 @@ For each detected table the report includes:
 - **Transformation** — deterministic steps synthesized after the cleaned shape is approved
 - **Preview** — source sample plus transformed before/after once steps exist
 
-Approve or reject each step. Rejecting a step includes a details box next to Reject; chat history lives at the bottom of the page. The **Reject** button at the top right of a table removes that table from the review set. Approving the cleaned shape locks the goal and synthesizes steps. Then compare **AI cleaned (goal)** vs **deterministic transform output**, approve or reject with details, then approve the **table**. After cataloguing, DNA Engine proposes joins onto silver and gold from the table’s grain and keys.
+Approve or reject each step. Rejecting a step includes a details box next to Reject; chat history lives at the bottom of the page. The little **×** on a table's own chip in the table pager removes that table from the review set (admins only); "Reject all files" on the file pager discards every workbook in review. Approving the cleaned shape locks the goal and synthesizes steps. Then compare **AI cleaned (goal)** vs **deterministic transform output**, approve or reject with details, then approve the **table**. After cataloguing, DNA Engine proposes joins onto silver and gold from the table’s grain and keys.
 
 Each table has its own `pipeline_stage`:
 
@@ -216,7 +216,7 @@ Operator workflow on the Review tab (per table):
 1. Review **Proposed cleaned data** → approve / reject with feedback
 2. Review **goal vs deterministic output** → approve / reject with feedback
 3. Approve table → catalog + silver
-4. Table chips show stage badges (`Clean review`, `Transform review`, …)
+4. Table chips show stage badges (`Clean review`, `Ready to save`, `Catalogued`, …); the `transform_review` stage shows no badge
 
 ### Transform (`transform.py`)
 

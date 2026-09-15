@@ -6,8 +6,6 @@ import json
 from dataclasses import dataclass, field
 from typing import Any
 
-from claude_agent_sdk import create_sdk_mcp_server, tool
-
 from hiveflow_core import json_default
 from hiveflow_spreadsheet_parser.detect import Region, detect_workbook
 from hiveflow_spreadsheet_parser.discover import build_draft_table
@@ -141,6 +139,13 @@ def read_range_data(
 
 
 def build_tool_server(session: ParseSession) -> Any:
+    # Only the Claude Agent SDK path (hiveflow_spreadsheet_parser.agent /
+    # refine_agent) calls this; the Bedrock-native tool loop
+    # (spreadsheet.interpret) uses the plain *_data functions above and never
+    # imports this far, so keep claude_agent_sdk out of the module's top-level
+    # imports — it isn't a dependency of the deployed interpret/propose Lambdas.
+    from claude_agent_sdk import create_sdk_mcp_server, tool
+
     @tool("list_sheets", "List every sheet with its size and the detector's candidate regions.", {})
     async def list_sheets(_args: dict[str, Any]) -> dict[str, Any]:
         return _text(list_sheets_data(session))

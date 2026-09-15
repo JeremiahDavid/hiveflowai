@@ -594,6 +594,80 @@ def test_approve_table_materializes_silver_reference(tmp_path: Path, monkeypatch
     assert entry["silver_row_count"] == 2
 
 
+def test_approve_table_does_not_raise_on_bad_cast_value(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Regression for the "invalid literal for int() with base 10: 'Included'" bug:
+    a cast-to-number column with one non-numeric row must not blow up approve_table."""
+    monkeypatch.setenv("HIVEFLOW_DATA_DIR", str(tmp_path))
+
+    from hiveflow.storage.parquet import read_parquet_local
+    from hiveflow.storage.paths import prefix_path, spreadsheet_reference_silver_entity_parquet_key
+    from hiveflow.spreadsheet.jobs import (
+        approve_table,
+        create_job,
+        run_parse,
+        store_upload,
+        update_report_tables,
+    )
+
+    path = tmp_path / "sample.xlsx"
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Items"
+    ws.append(["Item", "Unit Price"])
+    ws.append(["Widget", "10"])
+    ws.append(["Shipping", "Included"])
+    ws.append(["Gadget", "20.5"])
+    wb.save(path)
+
+    job = create_job(filename="sample.xlsx", username="poc")
+    store_upload(job["job_id"], filename="sample.xlsx", body=path.read_bytes())
+    run_parse(job["job_id"])
+
+    table = {
+        "table_id": "t0",
+        "entity_name": "items",
+        "purpose": "Item price list",
+        "grain": "one row per item",
+        "confidence": 0.9,
+        "status": "pending_review",
+        "schema": [
+            {"name": "item", "type": "string"},
+            {"name": "unit_price", "type": "number"},
+        ],
+        "profiling": {"columns": []},
+        "source": {"sheet": "Items", "row_count": 3},
+        "transformation_status": "approved",
+        "transformation": {
+            "version": 1,
+            "steps": [
+                {"op": "rename_columns", "mapping": {"Unit Price": "unit_price", "Item": "item"}},
+                {"op": "cast", "columns": {"unit_price": "number"}},
+            ],
+            "output_shape": {
+                "entity_name": "items",
+                "schema": [
+                    {"name": "item", "type": "string"},
+                    {"name": "unit_price", "type": "number"},
+                ],
+            },
+        },
+    }
+    update_report_tables(job["job_id"], [table])
+    approved = approve_table(job["job_id"], "t0", username="poc")
+    assert approved["status"] == "approved"
+
+    parquet_path = prefix_path(
+        tmp_path,
+        spreadsheet_reference_silver_entity_parquet_key("items"),
+    )
+    assert parquet_path.is_file()
+    rows = read_parquet_local(parquet_path)
+    # Whole column kept as text since one value couldn't cast — no crash, no data loss.
+    assert [row["unit_price"] for row in rows] == ["10", "Included", "20.5"]
+
+
 def test_compute_input_shape_hash_stable(tmp_path: Path) -> None:
     from hiveflow.spreadsheet.transform import compute_input_shape
 
@@ -629,6 +703,29 @@ def test_apply_transformation_rename_and_cast() -> None:
     assert out_headers == ["customer_name", "Amount"]
     assert out_rows[0][0] == "Acme"
     assert out_rows[1][1] == 20.5
+
+
+def test_apply_transformation_cast_never_raises_on_bad_value() -> None:
+    """Regression: a stray non-numeric value (e.g. "Included") in a column cast to
+    number used to raise ValueError from int(), crashing table approval. It must
+    now leave the whole column as text instead, and report an issue."""
+    from hiveflow.spreadsheet.transform import apply_transformation
+
+    headers = ["item", "unit_price"]
+    rows = [["Widget", "10"], ["Shipping", "Included"], ["Gadget", "20.5"]]
+    spec = {
+        "version": 1,
+        "steps": [{"op": "cast", "columns": {"unit_price": "number"}}],
+    }
+    issues: list[str] = []
+    out_rows, out_headers = apply_transformation(rows, headers, spec, issues=issues)
+    assert out_headers == headers
+    # Whole column left as original text (not partially cast) so Parquet's per-column
+    # type inference doesn't choke on a mix of int/float/str.
+    assert [row[1] for row in out_rows] == ["10", "Included", "20.5"]
+    assert len(issues) == 1
+    assert "unit_price" in issues[0]
+    assert "Included" in issues[0]
 
 
 def test_apply_transformation_keeps_rows_when_output_schema_mismatches() -> None:

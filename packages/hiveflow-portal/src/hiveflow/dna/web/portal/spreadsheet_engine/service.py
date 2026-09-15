@@ -14,8 +14,6 @@ from hiveflow.dna.web.portal.governance_helpers.bedrock_usage import (
     BedrockBudgetExceeded,
     usage_summary,
 )
-from hiveflow.process_config import Process, step_function_name_for_process
-
 _PIPELINE_STAGES: tuple[tuple[str, str], ...] = (
     ("parse", "Parse workbook"),
     ("profile", "Profile columns"),
@@ -155,10 +153,19 @@ def _on_lambda() -> bool:
 
 
 def _state_machine_arn(*, company: str, environment: str) -> str:
+    """ARN of the shared, global Spreadsheet Engine state machine.
+
+    One deployment per environment serves every company (``GlobalAgentPipelinesStack``)
+    — ``company`` is not part of the name, only of the execution input built in
+    ``enqueue_analysis`` below.
+    """
+    del company  # kept in the signature: caller still passes it, echoed into the payload
     explicit = os.getenv("HIVEFLOW_SPREADSHEET_STATE_MACHINE_ARN", "").strip()
     if explicit:
         return explicit
-    name = step_function_name_for_process(company, environment, "all", Process.SPREADSHEET_ANALYZE)
+    from hiveflow.project_config import spreadsheet_engine_state_machine_name
+
+    name = spreadsheet_engine_state_machine_name(environment)
     region = (
         os.getenv("AWS_REGION")
         or os.getenv("AWS_DEFAULT_REGION")
@@ -276,7 +283,7 @@ def enqueue_analysis(
     if str(job.get("status") or "") == "awaiting_sheets" and not job.get("selected_sheets"):
         raise ValueError("Select which sheets to analyze before generating proposals.")
 
-    payload = {"job_id": job_id}
+    payload = {"job_id": job_id, "company": company}
     if _on_lambda():
         from hiveflow.storage.aws import sfn_client
 

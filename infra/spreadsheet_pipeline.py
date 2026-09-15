@@ -2,15 +2,45 @@ from __future__ import annotations
 
 from typing import Any
 
-from aws_cdk import Duration
+from aws_cdk import Duration, Stack
+from aws_cdk import aws_iam as iam
 from aws_cdk import aws_lambda as _lambda
-from aws_cdk import aws_s3 as s3
 from aws_cdk import aws_stepfunctions as sfn
 from aws_cdk import aws_stepfunctions_tasks as tasks
 from constructs import Construct
 
 from lambda_bundle import HiveFlowLambdaRuntime, hiveflow_lambda_runtime
-from hiveflow.process_config import Process, lambda_name_for_process, step_function_name_for_process
+from hiveflow.project_config import agent_pipelines_role_name, spreadsheet_engine_state_machine_name
+
+
+def _create_shared_execution_role(scope: Construct, *, environment: str) -> iam.Role:
+    """One execution role shared by every Spreadsheet Engine Lambda.
+
+    A single, predictably-named role (rather than one auto-generated role per
+    function) is what lets a single trust-policy entry on each company's tenant
+    role (``hiveflow-portal-tenant-{company}-{environment}``) cover every
+    Lambda in this pipeline.
+    """
+    role = iam.Role(
+        scope,
+        "SpreadsheetLambdaRole",
+        role_name=agent_pipelines_role_name(environment),
+        assumed_by=iam.ServicePrincipal("lambda.amazonaws.com"),
+        managed_policies=[
+            iam.ManagedPolicy.from_aws_managed_policy_name(
+                "service-role/AWSLambdaBasicExecutionRole"
+            ),
+        ],
+    )
+    account = Stack.of(scope).account
+    env_slug = environment.strip().lower()
+    role.add_to_policy(
+        iam.PolicyStatement(
+            actions=["sts:AssumeRole"],
+            resources=[f"arn:aws:iam::{account}:role/hiveflow-portal-tenant-*-{env_slug}"],
+        )
+    )
+    return role
 
 
 def _apply_lambda_throttle_retry(task: tasks.LambdaInvoke) -> tasks.LambdaInvoke:
@@ -27,22 +57,26 @@ def create_spreadsheet_pipeline(
     scope: Construct,
     construct_id: str,
     *,
-    company: str,
     environment: str,
-    data_bucket: s3.IBucket,
     lambda_runtime: HiveFlowLambdaRuntime,
     common_env: dict[str, str],
     grant_bedrock: Any,
 ) -> dict[str, Any]:
-    """Spreadsheet Engine: parse -> profile -> interpret -> propose."""
+    """Spreadsheet Engine: parse -> profile -> interpret -> propose.
+
+    Global/shared across every company — a single deployment invoked with
+    ``company`` in the Step Functions input rather than one copy per company.
+    Data access is via the caller-supplied ``company``'s tenant role
+    (``hiveflow.tenant_credentials``), assumed inside each handler; these
+    Lambdas hold no standing per-company S3 grant.
+    """
     prefix = construct_id
+    shared_role = _create_shared_execution_role(scope, environment=environment)
 
     parse_fn = _lambda.Function(
         scope,
         f"{prefix}SpreadsheetParseFunction",
-        function_name=lambda_name_for_process(
-            company, environment, "all", Process.SPREADSHEET_PARSE
-        ),
+        function_name=f"platform-{environment.strip().lower()}-spreadsheet-parse",
         runtime=_lambda.Runtime.PYTHON_3_12,
         handler="hiveflow.spreadsheet.handlers.parse_handler",
         timeout=Duration.minutes(5),
@@ -51,13 +85,12 @@ def create_spreadsheet_pipeline(
         code=lambda_runtime.code,
         layers=lambda_runtime.layers,
         environment=common_env,
+        role=shared_role,
     )
     profile_fn = _lambda.Function(
         scope,
         f"{prefix}SpreadsheetProfileFunction",
-        function_name=lambda_name_for_process(
-            company, environment, "all", Process.SPREADSHEET_PROFILE
-        ),
+        function_name=f"platform-{environment.strip().lower()}-spreadsheet-profile",
         runtime=_lambda.Runtime.PYTHON_3_12,
         handler="hiveflow.spreadsheet.handlers.profile_handler",
         timeout=Duration.minutes(5),
@@ -66,6 +99,7 @@ def create_spreadsheet_pipeline(
         code=lambda_runtime.code,
         layers=lambda_runtime.layers,
         environment=common_env,
+        role=shared_role,
     )
     # interpret + propose both talk to Bedrock directly (a native `converse`
     # tool-use loop for interpret, a plain single-shot call for propose) — no
@@ -83,9 +117,7 @@ def create_spreadsheet_pipeline(
     interpret_fn = _lambda.Function(
         scope,
         f"{prefix}SpreadsheetInterpretFunction",
-        function_name=lambda_name_for_process(
-            company, environment, "all", Process.SPREADSHEET_INTERPRET
-        ),
+        function_name=f"platform-{environment.strip().lower()}-spreadsheet-interpret",
         runtime=_lambda.Runtime.PYTHON_3_12,
         handler="hiveflow.spreadsheet.handlers.interpret_handler",
         timeout=Duration.minutes(15),
@@ -94,13 +126,12 @@ def create_spreadsheet_pipeline(
         code=parser_runtime.code,
         layers=parser_runtime.layers,
         environment=common_env,
+        role=shared_role,
     )
     propose_table_fn = _lambda.Function(
         scope,
         f"{prefix}SpreadsheetProposeFunction",
-        function_name=lambda_name_for_process(
-            company, environment, "all", Process.SPREADSHEET_PROPOSE
-        ),
+        function_name=f"platform-{environment.strip().lower()}-spreadsheet-propose",
         runtime=_lambda.Runtime.PYTHON_3_12,
         handler="hiveflow.spreadsheet.handlers.propose_table_handler",
         timeout=Duration.minutes(15),
@@ -109,6 +140,7 @@ def create_spreadsheet_pipeline(
         code=parser_runtime.code,
         layers=parser_runtime.layers,
         environment=common_env,
+        role=shared_role,
     )
     # Plain zip Lambdas either side of the Map fan-out below — no Bedrock work,
     # just S3 reads/writes, so the "full" runtime (no spreadsheet-parser deps) is enough.
@@ -123,6 +155,7 @@ def create_spreadsheet_pipeline(
         code=lambda_runtime.code,
         layers=lambda_runtime.layers,
         environment=common_env,
+        role=shared_role,
     )
     propose_finalize_fn = _lambda.Function(
         scope,
@@ -135,11 +168,14 @@ def create_spreadsheet_pipeline(
         code=lambda_runtime.code,
         layers=lambda_runtime.layers,
         environment=common_env,
+        role=shared_role,
     )
 
-    for fn in (parse_fn, profile_fn, interpret_fn, propose_table_fn, propose_prepare_fn, propose_finalize_fn):
-        data_bucket.grant_read_write(fn)
-        grant_bedrock(fn)
+    # No standing S3 grant here — these are global/shared across every company,
+    # so data access happens per-invocation via that company's assumed tenant
+    # role (hiveflow.tenant_credentials); sts:AssumeRole on that wildcard is
+    # already granted once on shared_role above. Only Bedrock needs a per-call grant.
+    grant_bedrock(shared_role)
 
     parse_task = _apply_lambda_throttle_retry(
         tasks.LambdaInvoke(
@@ -158,6 +194,7 @@ def create_spreadsheet_pipeline(
             payload=sfn.TaskInput.from_object(
                 {
                     "job_id": sfn.JsonPath.string_at("$.job_id"),
+                    "company": sfn.JsonPath.string_at("$.company"),
                 }
             ),
         )
@@ -171,6 +208,7 @@ def create_spreadsheet_pipeline(
             payload=sfn.TaskInput.from_object(
                 {
                     "job_id": sfn.JsonPath.string_at("$.job_id"),
+                    "company": sfn.JsonPath.string_at("$.company"),
                 }
             ),
         )
@@ -184,6 +222,7 @@ def create_spreadsheet_pipeline(
             payload=sfn.TaskInput.from_object(
                 {
                     "job_id": sfn.JsonPath.string_at("$.job_id"),
+                    "company": sfn.JsonPath.string_at("$.company"),
                 }
             ),
         )
@@ -198,6 +237,7 @@ def create_spreadsheet_pipeline(
                 {
                     "job_id": sfn.JsonPath.string_at("$.job_id"),
                     "table_id": sfn.JsonPath.string_at("$.table_id"),
+                    "company": sfn.JsonPath.string_at("$.company"),
                 }
             ),
         )
@@ -216,6 +256,7 @@ def create_spreadsheet_pipeline(
         item_selector={
             "job_id": sfn.JsonPath.string_at("$.job_id"),
             "table_id": sfn.JsonPath.string_at("$$.Map.Item.Value"),
+            "company": sfn.JsonPath.string_at("$.company"),
         },
         max_concurrency=4,
         result_path=sfn.JsonPath.DISCARD,
@@ -230,6 +271,7 @@ def create_spreadsheet_pipeline(
             payload=sfn.TaskInput.from_object(
                 {
                     "job_id": sfn.JsonPath.string_at("$.job_id"),
+                    "company": sfn.JsonPath.string_at("$.company"),
                 }
             ),
         )
@@ -245,9 +287,7 @@ def create_spreadsheet_pipeline(
     state_machine = sfn.StateMachine(
         scope,
         f"{prefix}SpreadsheetAnalyzeStateMachine",
-        state_machine_name=step_function_name_for_process(
-            company, environment, "all", Process.SPREADSHEET_ANALYZE
-        ),
+        state_machine_name=spreadsheet_engine_state_machine_name(environment),
         definition_body=sfn.DefinitionBody.from_chainable(definition),
         # parse(5) + profile(5) + interpret(15) + one table's propose(15) at
         # max, plus retry slack. Tables run in parallel (max_concurrency=4) so

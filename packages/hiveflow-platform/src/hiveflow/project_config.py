@@ -452,6 +452,35 @@ def global_dna_stack_module_name() -> str:
     return "global_dna_stack"
 
 
+def global_agent_pipelines_stack_name(environment: str) -> str:
+    return f"GlobalAgentPipelinesStack-{environment}"
+
+
+def global_agent_pipelines_stack_module_name() -> str:
+    return "global_agent_pipelines_stack"
+
+
+def spreadsheet_engine_state_machine_name(environment: str) -> str:
+    """Name of the shared, global Spreadsheet Engine Step Functions state machine.
+
+    One deployment per environment (``GlobalAgentPipelinesStack``) serves every
+    company — invoked with ``company`` in the execution input rather than one
+    state machine per company.
+    """
+    return f"platform-{environment.strip().lower()}-spreadsheet"
+
+
+def agent_pipelines_role_name(environment: str) -> str:
+    """Shared IAM execution role for every Lambda in ``GlobalAgentPipelinesStack``.
+
+    A single, predictably-named role (rather than one auto-generated role per
+    function) is what lets each company's tenant role
+    (``hiveflow-portal-tenant-{company}-{environment}``) trust every global
+    agent-pipeline Lambda with one trust-policy entry.
+    """
+    return f"hiveflow-agent-pipelines-{environment.strip().lower()}-role"
+
+
 def platform_admin_stack_name(environment: str) -> str:
     return f"PlatformAdminStack-{environment}"
 
