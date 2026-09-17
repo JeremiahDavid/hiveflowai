@@ -1,9 +1,10 @@
-"""Phase 3a: materialize an approved, cleaned table into silver/reference_lab/.
+"""Materialize an approved, cleaned table into silver/reference/{entity}.
 
-Reuses two of the production Spreadsheet Engine's building blocks directly:
-``hiveflow.spreadsheet.preview.extract_table_preview`` (public) for full-workbook
-row extraction, and ``hiveflow.spreadsheet.transform.apply_transformation``
-(public) for cast-safe row transformation — the same functions
+Reuses two of the (retired) production Spreadsheet Engine's low-level building
+blocks directly: ``hiveflow.spreadsheet.preview.extract_table_preview``
+(public) for full-workbook row extraction, and
+``hiveflow.spreadsheet.transform.apply_transformation`` (public) for
+cast-safe row transformation — the same functions
 ``hiveflow.spreadsheet.materialize`` itself is built on. This module does NOT
 reuse ``materialize._run_transformation_over_full_data`` itself, because that
 helper re-derives a table's region by looking it up in ``parse_payload`` by
@@ -13,10 +14,8 @@ the ORIGINAL wrong region instead. This version reads the region straight off
 the table doc's own ``source_region``, which always reflects the approved
 correction.
 
-The destination differs from production too: ``silver/reference_lab/{entity}``
-(Spreadsheet Lab's own prefix), never ``silver/reference/{entity}`` (the
-production engine's), so lab test data can never land next to, or overwrite,
-real reference entities.
+Writes to the same ``silver/reference/{entity}`` location the old engine used —
+this module is now the only Spreadsheet Engine implementation.
 """
 
 from __future__ import annotations
@@ -33,9 +32,9 @@ from hiveflow.storage.blobstore import resolve_blob_location
 from hiveflow.storage.column_names import normalize_silver_rows
 from hiveflow.storage.parquet import write_parquet_local, write_parquet_s3
 from hiveflow.storage.paths import (
-    SPREADSHEET_LAB_REFERENCE_SOURCE,
+    SPREADSHEET_REFERENCE_SOURCE,
     prefix_path,
-    spreadsheet_lab_reference_silver_entity_parquet_key,
+    spreadsheet_reference_silver_entity_parquet_key,
 )
 
 __all__ = [
@@ -117,7 +116,7 @@ def _write_reference_silver_parquet(
     issues: list[str] | None = None,
 ) -> SilverMaterialization:
     entity = _normalize_entity_name(entity_name)
-    parquet_key = spreadsheet_lab_reference_silver_entity_parquet_key(entity)
+    parquet_key = spreadsheet_reference_silver_entity_parquet_key(entity)
     issues = issues if issues is not None else []
     normalized_rows = _coerce_uniform_column_types(normalize_silver_rows(rows), issues=issues)
     loc = resolve_blob_location()
@@ -133,7 +132,7 @@ def _write_reference_silver_parquet(
         out_dir = prefix_path(loc.data_dir, parquet_key).parent
         location = write_parquet_local(out_dir, "data.parquet", normalized_rows)
     return SilverMaterialization(
-        source=SPREADSHEET_LAB_REFERENCE_SOURCE,
+        source=SPREADSHEET_REFERENCE_SOURCE,
         entity=entity,
         parquet_key=parquet_key,
         location=location,
@@ -149,7 +148,7 @@ def materialize_approved_table_lab(
     upload_body: bytes,
 ) -> LabMaterialization | None:
     """Extract every workbook row for the table's approved region, apply its
-    approved transformation, and write silver/reference_lab/{entity} parquet."""
+    approved transformation, and write silver/reference/{entity} parquet."""
     region = table.get("source_region") or {}
     raw_headers = [str(name) for name in (region.get("headers") or []) if str(name).strip()]
     if not raw_headers:
@@ -195,22 +194,26 @@ def materialize_approved_table_lab(
 def lambda_handler(event: dict[str, Any] | None, _context: Any) -> dict[str, Any]:
     """Entry point for the dedicated materialize Lambda (see worker.run_materialize).
 
-    Takes only ``{job_id, table_id}`` — re-reads the job/table/workbook itself
-    from S3 rather than taking them as payload, since this Lambda is invoked
-    synchronously and a real workbook can easily exceed the 6MB payload cap.
-    This is the only Lambda in Spreadsheet Lab that needs pyarrow installed.
+    Takes ``{job_id, table_id, company, bucket}`` — re-reads the job/table/
+    workbook itself from S3 (binding to the tenant carried in ``company``/
+    ``bucket``, see ``worker._worker_tenant_scope``) rather than taking them
+    as payload, since this Lambda is invoked synchronously and a real
+    workbook can easily exceed the 6MB payload cap. This is the only Lambda
+    in Spreadsheet Lab that needs pyarrow installed.
     """
     from hiveflow.spreadsheet_lab import store
+    from hiveflow.spreadsheet_lab.worker import _worker_tenant_scope
 
     payload = event or {}
-    job_id = str(payload.get("job_id") or "")
-    table_id = str(payload.get("table_id") or "")
-    job = store.load_job(job_id)
-    table = store.load_table(job_id, table_id)
-    if not job or not table:
-        raise ValueError(f"Unknown job/table {job_id!r}/{table_id!r}")
+    with _worker_tenant_scope(payload):
+        job_id = str(payload.get("job_id") or "")
+        table_id = str(payload.get("table_id") or "")
+        job = store.load_job(job_id)
+        table = store.load_table(job_id, table_id)
+        if not job or not table:
+            raise ValueError(f"Unknown job/table {job_id!r}/{table_id!r}")
 
-    upload_body = store.load_upload_bytes(job)
-    result = materialize_approved_table_lab(job=job, table=table, upload_body=upload_body)
-    silver = lab_materialization_payload(result, materialized_at=store.now_iso()) if result else None
-    return {"silver": silver}
+        upload_body = store.load_upload_bytes(job)
+        result = materialize_approved_table_lab(job=job, table=table, upload_body=upload_body)
+        silver = lab_materialization_payload(result, materialized_at=store.now_iso()) if result else None
+        return {"silver": silver}

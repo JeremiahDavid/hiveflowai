@@ -3,16 +3,29 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any, Callable
 
 from hiveflow.spreadsheet._agent_runtime import text_invoke as _default_invoke
-from hiveflow.spreadsheet.interpret import _extract_json
 from hiveflow.spreadsheet.sample import (
     DEFAULT_MAX_SAMPLE_BYTES,
     flatten_oracle_windows,
     select_oracle_windows,
 )
 from hiveflow.spreadsheet.transform import apply_transformation, normalize_header_name
+
+_JSON_FENCE = re.compile(r"```(?:json)?\s*([\s\S]*?)```", re.IGNORECASE)
+
+
+def _extract_json(text: str) -> dict[str, Any]:
+    stripped = text.strip()
+    match = _JSON_FENCE.search(stripped)
+    if match:
+        stripped = match.group(1).strip()
+    payload = json.loads(stripped)
+    if not isinstance(payload, dict):
+        raise ValueError("Bedrock response must be a JSON object")
+    return payload
 
 _ORACLE_SYSTEM = """You clean messy spreadsheet table excerpts for a data platform.
 Return strict JSON only (no markdown):

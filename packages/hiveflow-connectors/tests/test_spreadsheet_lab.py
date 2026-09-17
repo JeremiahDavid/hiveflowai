@@ -232,7 +232,7 @@ def test_full_pipeline_extract_clean_materialize(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """End-to-end: approve extraction -> phase 2 auto-starts -> approve clean
-    shape -> approve transformation -> materializes to silver/reference_lab/."""
+    shape -> approve transformation -> materializes to silver/reference/."""
     monkeypatch.setenv("HIVEFLOW_DATA_DIR", str(tmp_path))
 
     from hiveflow.spreadsheet_lab import clean_review, extract_review, intake, store
@@ -268,14 +268,14 @@ def test_full_pipeline_extract_clean_materialize(
     assert finished["transformation_status"] == "approved"
     assert finished["phase"] == "done"
     assert finished["silver"] is not None
-    assert finished["silver"]["silver_source"] == "reference_lab"
+    assert finished["silver"]["silver_source"] == "reference"
     assert finished["silver"]["silver_row_count"] == 2
 
     job = store.load_job(job["job_id"])
     assert job is not None
     assert job["status"] == "ready"
 
-    parquet_path = tmp_path / "silver" / "reference_lab" / finished["silver"]["silver_entity"] / "data.parquet"
+    parquet_path = tmp_path / "silver" / "reference" / finished["silver"]["silver_entity"] / "data.parquet"
     assert parquet_path.exists()
 
     # Table-level recipe was saved and keyed by this table's own input shape.

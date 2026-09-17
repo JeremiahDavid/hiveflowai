@@ -28,6 +28,10 @@ def _request_wants_json(request: Request) -> bool:
 
 
 def _app_url(request: Request, path: str) -> str:
+    if path.startswith("http://") or path.startswith("https://"):
+        # Already absolute — e.g. a nav link to the Spreadsheet Engine's own
+        # subdomain. Don't prefix it with this app's script_root.
+        return path
     if not path.startswith("/"):
         path = f"/{path}"
     return f"{request.script_root}{path}"

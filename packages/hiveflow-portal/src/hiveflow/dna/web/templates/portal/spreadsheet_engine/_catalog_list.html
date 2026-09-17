@@ -1,6 +1,0 @@
-
-    <aside class="card spreadsheet-catalog-list">
-      <h2>Approved catalog</h2>
-      <p class="muted">Select a file to inspect its output, schema, preview, and transformation.</p>
-      <nav class="spreadsheet-catalog-file-nav" aria-label="Approved files">{% for chip in chips %}<a class="source-docs-source-chip spreadsheet-catalog-file{% if chip.active %} is-active{% endif %}" href="{{ chip.href }}"><span class="spreadsheet-catalog-file-name">{{ chip.name }}</span>{% if chip.entity %}<span class="spreadsheet-catalog-file-entity">{{ chip.entity }}</span>{% endif %}<span class="source-docs-source-badge">Last upload: {{ chip.last_upload }}</span></a>{% endfor %}</nav>
-    </aside>

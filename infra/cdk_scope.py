@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-VALID_CDK_SCOPES = frozenset({"all", "ingest", "platform", "spreadsheet_lab"})
+VALID_CDK_SCOPES = frozenset({"all", "ingest", "platform"})
 
 
 def resolve_cdk_scope(*, context: str | None = None, env: str | None = None) -> str:

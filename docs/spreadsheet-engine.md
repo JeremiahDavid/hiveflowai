@@ -1,380 +1,70 @@
 # Spreadsheet Engine
 
-Turn uploaded Excel workbooks (`.xlsx`) into governed reference entities: detect tables, infer schema and business meaning with Bedrock, propose deterministic cleaning steps, and materialize approved tables into `silver/reference/` parquet.
+Turns an uploaded Excel workbook (`.xlsx`) into a governed reference entity: detect tables, propose schema/cleaning with Bedrock, let an operator review and approve each step on a Kanban-style board, and materialize approved tables into `silver/reference/{entity}` parquet.
 
-The Spreadsheet Engine is a **virtual source** in the Source Browser (`sse`). It is not a lake connector like QBO or Business Central — it produces reference data that operators review and approve before it lands in the lake.
+It is a client-portal feature reachable from the Source Browser's nav (see `dna_nav.py`), but served from its **own subdomain and Lambda** rather than being mounted into the Werkzeug portal app — it trusts the portal's session cookie instead of having its own login.
 
-**Portal route:** `/portal/semantics/source-docs` (default source `sse`)
+**Site:** `https://spreadsheet-engine.{zone}/` (hostname from `config.yaml`'s `ui.spreadsheet_engine.hostname`)
 
-**Engine code:** `packages/hiveflow-connectors/src/hiveflow/spreadsheet/`
+**Backend (orchestration):** `packages/hiveflow-connectors/src/hiveflow/spreadsheet_lab/`
 
-**Portal UI:** `packages/hiveflow-portal/src/hiveflow/dna/web/portal/spreadsheet_engine/`
+**Backend (shared substrate, reused by import):** `packages/hiveflow-connectors/src/hiveflow/spreadsheet/` (`_agent_runtime.py`, `synthesize.py`, `transform.py`, `materialize.py`, `parser.py`)
 
-**Infrastructure:** `infra/spreadsheet_pipeline.py` (Step Functions + Lambdas in `ReportingStack`)
+**Web UI:** `packages/hiveflow-portal/src/hiveflow/spreadsheet_lab/web/` (its own FastAPI app, Jinja2 templates, no shared code with `dna.web`)
 
----
-
-## Operator workflow
-
-```mermaid
-flowchart LR
-  A[Upload .xlsx] --> B[Parse]
-  B --> C[Select sheets]
-  C --> D[Profile]
-  D --> E[Interpret schema]
-  E --> F[AI clean tables]
-  F --> G[Approve / reject cleaned shape]
-  G --> H[Synthesize deterministic steps]
-  H --> I[Approve transformation]
-  I --> J[Approve table]
-  J --> K[Silver reference parquet]
-  K --> L[DNA propose lake joins]
-```
-
-### 1. Upload and analyze
-
-Upload a workbook from the Source Browser. The portal creates a **job**, stores the file, and **parses sheets**. The operator then selects which sheets to analyze (all sheets are listed as checkboxes, selected by default). After that, the portal starts the `spreadsheet_analyze` Step Functions workflow (or runs the remaining pipeline synchronously in local dev).
-
-Pipeline stages:
-
-| Stage | Job status | What happens |
-|---|---|---|
-| **Parse** | `parsing` → `awaiting_sheets` | Detect table regions per sheet; list every sheet for operator selection |
-| **Select sheets** | `awaiting_sheets` → `parsed` | Operator checks which sheets to analyze; unchecked sheets are skipped |
-| **Profile** | `profiling` → `profiled` | Infer column types, null rates, key candidates |
-| **Interpret** | `interpreting` → `interpreted` | Bedrock proposes entity name, grain, schema, relationships |
-| **Propose** | `proposing` → `ready` | AI cleans each table into a reviewable `clean_goal` |
-
-While analysis runs, the Proposals tab shows a single status message: AI is generating a cleaned proposal of all tables. If the upload replaces an already-approved workbook, the message says approved steps are being applied for final approval.
-
-Poll progress at `GET /api/spreadsheet-engine/status?job_id=…`.
-
-### 2. Review proposals
-
-For each detected table the report includes:
-
-- **Proposed cleaned data** — AI-cleaned preview (`clean_goal`) for shape approval
-- **Schema** — column names, types, keys, business descriptions
-- **Transformation** — deterministic steps synthesized after the cleaned shape is approved
-- **Preview** — source sample plus transformed before/after once steps exist
-
-Approve or reject each step. Rejecting a step includes a details box next to Reject; chat history lives at the bottom of the page. The little **×** on a table's own chip in the table pager removes that table from the review set (admins only); "Reject all files" on the file pager discards every workbook in review. Approving the cleaned shape locks the goal and synthesizes steps. Then compare **AI cleaned (goal)** vs **deterministic transform output**, approve or reject with details, then approve the **table**. After cataloguing, DNA Engine proposes joins onto silver and gold from the table’s grain and keys.
-
-Each table has its own `pipeline_stage`:
-
-| Stage | Meaning |
-|---|---|
-| `clean_review` | Inspect AI cleaned preview; approve or reject with feedback |
-| `transform_review` | Compare goal vs deterministic output; approve or reject with feedback |
-| `transform_approved` | Transformation saved for reuse; ready to approve table into catalog |
-| `catalogued` | Table approved and written to silver/reference |
-| `join_review` | Review DNA-proposed joins to silver and existing gold tables |
-| `joins_approved` | Selected lake joins accepted |
-
-### 3. Catalog and silver
-
-Approving a table:
-
-1. Writes a **catalog entry** under `governance/spreadsheet_engine/catalog/`
-2. Saves or updates a **knowledge entry** (approved transformation + input shape) for future uploads
-3. **Materializes** the table to `silver/reference/{entity}/data.parquet`
-4. **DNA join proposals** (`hiveflow.dna.join_proposals`) match the table’s grain and keys to:
-   - DNA pack silver entities and pack joins
-   - lake silver (connector + `silver/reference/`)
-   - existing gold outputs (pack outputs, SQL gold `grain_columns`, `gold/dna/` parquet)
-
-The operator selects joins, or re-runs / rejects so DNA can try again. This step does not call Bedrock; matching is deterministic from grain and keys.
-
-Stable catalog IDs use `{source_file_slug}__{entity_name}` (for example `price_list__customers`). Legacy job-bound IDs (`{job_id}__{table_id}`) remain as fallbacks.
-
-### 4. Re-upload (reload)
-
-When a workbook matches a prior catalog entry (by `input_shape.shape_hash` or header compatibility), the portal can link the job to that catalog. On reload:
-
-- **Interpret** validates the new file against the approved transformation — **no Bedrock**
-- **Propose** finalizes validation — **no Bedrock**
-- If validation passes, the operator completes the reload without re-approving schema or transforms
-
-If validation fails, the operator can request a **schema rewrite** (re-run interpret + propose with AI) or a **transformation rewrite** (re-run propose only).
+**Infrastructure:** `infra/spreadsheet_engine.py`, wired into `infra/stacks/global_agent_pipelines_stack.py`
 
 ---
 
-## Architecture
+## Why its own app, not a page in the portal
 
-```mermaid
-flowchart TB
-  subgraph portal [Portal]
-    UI[Source Browser sse]
-    SVC[spreadsheet_engine/service.py]
-  end
+The board's UI needs a real modal dialog and native drag-and-drop, neither of which exist anywhere else in the portal (which uses `<details>/<summary>` for disclosure and has no JS drag-and-drop at all). Building it as a small, independent FastAPI/Jinja app was simpler and lower-risk than either porting that interaction model into the portal's raw-HTML-string `render.py` style or bridging an ASGI app into the Werkzeug app in-process. It still needs to behave like a portal feature, so it shares two things with the real portal rather than reinventing them:
 
-  subgraph aws [AWS - deployed]
-    SFN[Step Functions spreadsheet_analyze]
-    L1[parse_handler]
-    L2[profile_handler]
-    L3[interpret_handler]
-    L4P[propose_prepare_handler]
-    L4[propose_table_handler ×N, parallel Map]
-    L4F[propose_finalize_handler]
-    BR[Bedrock Runtime]
-  end
+- **Auth**: `web/auth.py` validates the same signed `hiveflow_portal_session` cookie the portal issues, via `hiveflow.dna.web.portal.auth.session_from_request` (which duck-types across werkzeug and Starlette `Request` objects for exactly this). No valid session → redirect to the portal's own `/portal/login` with `next` pointing back at this app's (absolute, cross-subdomain) URL. This only works if both Lambdas are configured with the same `HIVEFLOW_PORTAL_COOKIE_DOMAIN` (e.g. `.hive-flow-ai.com`, so the cookie reaches both hosts) and the same `HIVEFLOW_PORTAL_SESSION_SECRET_ARN` (so both sign/verify with the identical secret).
+- **Theme**: `/static/theme.css` and the brand SVGs are served straight from `hiveflow.dna.web`'s static directory (`app.py`'s `_DNA_STATIC_ASSETS` whitelist) rather than duplicated, so the two can't drift out of sync. `layout.html` reproduces `_layout.html`'s topbar/brand/footer chrome; the board itself uses new `se-*`-prefixed classes appended to the end of `theme.css` for the modal and drag-and-drop states that don't exist elsewhere.
 
-  subgraph engine [hiveflow.spreadsheet]
-    PARSER[parser]
-    PROF[profiler]
-    INTERP[interpret]
-    PROP[propose]
-    XFORM[transform]
-    JOBS[jobs]
-  end
+## Multi-tenancy
 
-  subgraph storage [Lake / local data dir]
-    JOBS3[governance/spreadsheet_engine/jobs/]
-    CAT[governance/spreadsheet_engine/catalog/]
-    KB[governance/spreadsheet_engine/knowledge/]
-    SILVER[silver/reference/]
-  end
+Like the rest of the multi-tenant portal, this app holds no standing per-company S3 grant — it resolves the tenant and assumes that company's role per request:
 
-  UI --> SVC
-  SVC --> JOBS
-  SVC --> SFN
-  SFN --> L1 --> L2 --> L3 --> L4P --> L4 --> L4F
-  L1 & L2 & L3 & L4P & L4 & L4F --> JOBS
-  JOBS --> PARSER & PROF & INTERP & PROP
-  INTERP & PROP --> BR
-  PROP --> XFORM
-  JOBS --> JOBS3 & CAT & KB
-  JOBS --> SILVER
-```
-
-**Package boundaries**
-
-| Package | Responsibility |
-|---|---|
-| `hiveflow-connectors` | Parse, profile, interpret, propose, transform, jobs, Lambda handlers |
-| `hiveflow-platform` | S3/local path helpers (`hiveflow.storage.paths`) |
-| `hiveflow-dna` | Join proposals from grain/keys onto silver and gold (`join_proposals.py`) |
-| `hiveflow-portal` | Upload UI, Step Functions kickoff, approvals, DNA join review, status API |
-
-Connectors depend on platform only for config and storage paths — the engine does not invent ad-hoc S3 key schemes.
-
----
-
-## Pipeline modules
-
-### Parse (`parser.py`)
-
-`parse_workbook(path)` loads an `.xlsx` workbook with openpyxl (`data_only=True`) and scans each sheet for contiguous table regions.
-
-Detection rules (simplified):
-
-- Prefer Excel ListObjects (`ws.tables`) and PivotTables (`ws._pivots` location) when the sheet defines them — including several on one sheet
-- Then scan leftover area for contiguous regions; split side-by-side tables on fully empty separator columns when those groups overlap on the same rows
-- Skip empty rows; treat two consecutive blank rows as end-of-table
-- Heuristic regions require at least two data rows and two non-empty columns (named Excel tables may be empty)
-- Header row must look like column labels (not report preamble, phone numbers, long prose)
-- Headers are normalized to snake_case (`Customer ID` → `customer_id`)
-
-Output: `spreadsheet_engine_parse` JSON with `tables[]` — each table has `table_id`, sheet coordinates (`header_row`, `data_start_row`, `data_end_row`, `min_col`, `max_col`), `headers`, and `sample_rows`.
-
-### Profile (`profiler.py`)
-
-`profile_tables(parse_payload)` computes per-column statistics from parse samples:
-
-- Inferred type (`string`, `number`, `date`, `email`, `currency`, …)
-- Null rate, cardinality, unique ratio
-- `likely_key` when uniqueness ≥ 95%
-- `key_candidates` at table level
-
-### Interpret (`interpret.py`)
-
-`interpret_tables(parse, profile, workbook_path=...)` tries three tiers, each falling back to the next on failure:
-
-1. **Agent pass (`_agent_interpret`)** — when a `workbook_path` is given, a tool-capable loop driven directly by `bedrock-runtime.converse`'s native `toolConfig` (`_agent_runtime.run_bedrock_tool_agent` — plain boto3, no Node/CLI) lets the model inspect the real workbook (`list_sheets`, `get_sheet_map`, `read_range`) before calling `record_interpretation` once per table and `finish`. This replaced an earlier Claude-Agent-SDK/`claude`-CLI version of the same tools: that path was silently failing on every real invocation (Bedrock's own model-invocation logs showed a session-startup probe, an unused session-title call, then a multi-minute silent hang before falling back anyway) — porting the same tool bodies onto Bedrock's own tool-use protocol keeps the capability without the CLI subprocess to hang.
-2. **Single-shot (`_default_invoke`)** — calls Bedrock (Claude Haiku by default) once with profiling stats and sample rows, no tools. Used when there's no `workbook_path`, or the agent pass raises.
-3. **Heuristic fallback** — derives entity name from the sheet title and schema from profiler output when Bedrock is unavailable or returns invalid JSON (`invoke=False` in tests skips the API call entirely).
-
-All three tiers return entity proposals with the same shape: `entity_name`, `purpose`, `grain`, `confidence`, `schema`, `relationships`.
-
-### Propose (`propose.py`, `synthesize.py`, `sample.py`)
-
-`propose_transform_for_table(...)` attaches a **cleaned data goal** to one interpreted table for operator review; `propose_transforms(...)`/`propose_transforms_for_report(...)` loop that sequentially over every table for the local/dev pipeline. Transform steps are synthesized **after** the cleaned shape is approved.
-
-The deployed pipeline does **not** run tables sequentially in one Lambda — a table's AI call can take real time, and running every table in one 900s Lambda invocation would time out on any workbook with more than a handful of tables. Instead a Step Functions **Map state** fans tables out to parallel `propose_table_handler` invocations (`run_propose_table`, `jobs.py`), bookended by `run_propose_prepare` (flips the job to `proposing`, lists `table_ids`) and `run_propose_finalize` (aggregates each table's S3 output into the final `report.json`, flips the job to `ready`). Per-table branches only ever write their own `governance/spreadsheet_engine/jobs/{job_id}/tables/{table_id}.json` key — never job.json — so concurrent branches can't race on the shared job record. `jobs.propose_table_progress` reads that same per-table state (a table's JSON exists from the interpret stage already, so "has `clean_goal`" — not existence — is the ready signal) to give the portal UI a live per-table checklist instead of one job-wide spinner.
-
-Despite running on the interpret/propose **container-image** Lambdas (Node + the `claude` CLI, `HIVEFLOW_AGENT_RUNTIME=sdk`), the propose stage's oracle-clean and transform-synthesis calls (`synthesize.py`, via `_agent_runtime.text_invoke`) always go straight to a plain single-shot `converse` call — confirmed via Bedrock's own model-invocation logs that routing a single-shot, no-tools call through the Agent SDK still pays for a full Claude Code CLI session (model-availability probes + an unused "name this session" call) before an internal failure fell back to `converse` anyway. `text_invoke` skips straight there now, so a table's real cost is one Bedrock call, not one CLI session plus a fallback.
-
-1. **AI clean (oracle)** — sample rows are cleaned into `clean_goal` (`headers`, `rows`, `grain`) with `clean_shape_status=pending_review`.
-2. **Operator review** — approve the cleaned preview, or reject with feedback to re-clean.
-3. **Synthesize on shape approve** — `approve_clean_shape` locks the goal as final and asks the model to reverse-engineer deterministic steps (`group_rows`, `filter_rows`, `cast`, …) that recreate it. Steps are verified against the goal before `transformation_status=pending_review`.
-4. **Catalog / knowledge reuse** — when a linked catalog or knowledge entry matches `input_shape` (≥ 0.8), prior steps are reused and the clean shape is treated as already approved.
-
-`extract_table_sample` reads rows up to a byte budget (default 512 MiB). Oracle prompts use a separate, smaller cap (default 2 MiB) with windowed excerpts via `select_oracle_windows`.
-
-Operator workflow on the Review tab (per table):
-
-1. Review **Proposed cleaned data** → approve / reject with feedback
-2. Review **goal vs deterministic output** → approve / reject with feedback
-3. Approve table → catalog + silver
-4. Table chips show stage badges (`Clean review`, `Ready to save`, `Catalogued`, …); the `transform_review` stage shows no badge
-
-### Transform (`transform.py`)
-
-Transformations are versioned JSON specs applied deterministically to row data:
-
-| Op | Purpose |
-|---|---|
-| `rename_columns` | Map source headers to schema column names |
-| `cast` | Coerce columns to `string`, `number`, `date`, `datetime`, `boolean` |
-| `group_rows` | Merge continuation rows (blank key) into the preceding key row |
-| `filter_rows` | Keep rows matching `col != null`, `col != 'Grand Total'`, `AND`/`OR`, or `col not in ('NULL', 'Grand Total')`. The string `NULL` counts as null. |
-| `derive_column` | Add computed columns (`first_name + ' ' + last_name`) |
-
-`compute_input_shape` hashes sheet name + normalized headers into `shape_hash` for catalog matching. `apply_transformation` runs steps and projects to `output_shape.schema` when present.
-
-### Materialize (`materialize.py`)
-
-On table approval, `materialize_approved_table` re-reads the full workbook region, applies the approved transformation, and writes parquet to:
-
-```
-silver/reference/{entity}/data.parquet
-```
-
-Catalog entries record `silver_source`, `silver_entity`, `silver_parquet_key`, and `silver_row_count`.
-
-### DNA join proposals (`hiveflow.dna.join_proposals`)
-
-After a table is catalogued, the portal asks DNA Engine to propose joins. Matching is deterministic (no Bedrock):
-
-- Source **grain** tokens and **keys** (schema `is_key` / `is_foreign_key`, profiler `likely_key`)
-- Silver: production pack entities (`grain` + `primary_key`), pack `joins`, lake silver for the connector, and `silver/reference/`
-- Gold: pack outputs, SQL pack gold transforms (`grain_columns`), and `gold/dna/` parquet
-
-Proposed joins are stored on the job table (`join_proposals`, `join_status`) for operator approval.
-
-### Jobs (`jobs.py`)
-
-Central orchestration and persistence:
-
-- `create_job`, `store_upload`, `run_parse`, `run_profile`, `run_interpret`, `run_propose`
-- `run_pipeline` — synchronous full pipeline for local dev (`pipeline_handler`)
-- Catalog: `save_catalog_entry`, `load_catalog_entry`, `list_catalog_entries`
-- Knowledge: `save_knowledge_entry`, `load_knowledge_matches`
-- Approvals: `approve_clean_shape`, `approve_transformation`, `approve_table`, `complete_reload`
-- Reload: `run_reload_prepare`, `run_reload_finalize`, `request_schema_rewrite`
-
-Lambda handlers in `handlers.py` wrap the `run_*` functions for Step Functions.
-
----
+1. `web/tenant.py`'s `tenant_scope(client_id)` (entered by `app.py`'s auth middleware) resolves the session's `client_id` → `reporting_company` → data bucket, exactly like `dna.web.portal.routes._portal_settings`'s strict branch, then assumes `hiveflow-portal-tenant-{company}-{environment}` for the rest of the request (`hiveflow.tenant_credentials`).
+2. The Lambda's own execution role is the same shared `agent_pipelines_role_name(environment)` role every tenant role already trusts for this purpose (no per-app IAM wiring needed).
+3. A per-table AI call runs longer than an HTTP request should — instead of Step Functions, the request writes a `"processing"` stub and asynchronously self-invokes the same Lambda (`worker.py`, the same pattern as the portal's KPI Generator). That second invocation is a genuinely separate Lambda event with no ambient tenant context, so the job document's `company` field and the enqueuing request's already-resolved bucket are carried into the invocation payload, and `worker._worker_tenant_scope` rebinds to that tenant before touching storage.
+4. The parquet write runs in a *third*, dedicated Lambda (`materialize_lab.py`) for the same reason production's old pipeline needed one: `pyarrow` can't ship in the same package as `pandas`/`pydantic`/`python-calamine` without exceeding Lambda's 250MB unzipped limit. It receives `{job_id, table_id, company, bucket}` and rebinds the same way.
 
 ## Storage layout
 
-All paths are defined in `hiveflow.storage.paths` under `governance/spreadsheet_engine/`:
-
 ```
-governance/spreadsheet_engine/
-  jobs/{job_id}/
-    job.json              # job metadata and status
-    upload/{filename}     # original .xlsx
-    parse.json            # parse output
-    profile.json          # profile output
-    report.json           # interpreted + proposed tables
-    tables/{table_id}.json
-  catalog/{catalog_id}.json
-  knowledge/{knowledge_id}.json
+governance/spreadsheet_engine/jobs/{job_id}/job.json
+governance/spreadsheet_engine/jobs/{job_id}/upload/{filename}
+governance/spreadsheet_engine/jobs/{job_id}/parse.json
+governance/spreadsheet_engine/jobs/{job_id}/tables/{table_id}.json
+governance/spreadsheet_engine/recipes/files/{file_shape_hash}.json
+governance/spreadsheet_engine/recipes/tables/{table_shape_hash}.json
+silver/reference/{entity}/data.parquet
 ```
 
-**Job statuses:** `uploaded` → `parsing` → `awaiting_sheets` → `parsed` → `profiling` → `profiled` → `interpreting` → `interpreted` → `proposing` → `ready` (or `error`).
+All under the **tenant's own bucket** (resolved per request, see above) — same key scheme every reporting company gets, not a shared/pooled location.
 
-With `HIVEFLOW_S3_BUCKET` set, artifacts are written to S3. Otherwise `HIVEFLOW_DATA_DIR` (default `data/`) is used for local development.
+## The review board
 
----
+Each table moves through a fixed set of lanes, computed server-side from `(phase, status, clean_shape_status)` (`app.py::_lane_for_table`):
 
-## Environment variables
+1. **Extracting** — the deterministic heuristic parser (falling back to a Bedrock "blind scan" via `list_sheets`/`get_sheet_map`/`read_range` if it finds nothing) proposes a region + schema; the operator approves, discards, or rejects with feedback (which re-invokes the same agent with the prior proposal + feedback attached — no persisted transcript, same pattern as the KPI Generator).
+2. **Approved — awaiting cleaning** → **Cleaning: shape** → **Cleaning: transform** — the AI proposes a cleaned shape (`clean_goal`), then deterministic transform steps; each is independently approvable, rejectable-with-feedback, or discardable.
+3. **Done** — materialized to `silver/reference/{entity}`, with a preview of the actual output rows and any cast-safety notes (e.g. a column with mixed types got coerced to text rather than dropping rows).
+4. **Discarded** — reachable from any lane (a per-card Discard button, or dragging a card onto this lane); tables here are excluded from the finished-job check but remembered on re-upload (see recipes).
 
-| Variable | Default | Purpose |
-|---|---|---|
-| `HIVEFLOW_S3_BUCKET` | (empty) | S3 bucket for job artifacts; empty → local `HIVEFLOW_DATA_DIR` |
-| `HIVEFLOW_DATA_DIR` | `data` | Local filesystem root when not using S3 |
-| `HIVEFLOW_BEDROCK_MODEL_ID` | `us.anthropic.claude-haiku-4-5-20251001-v1:0` | Model for interpret / propose / synthesize |
-| `HIVEFLOW_SPREADSHEET_STATE_MACHINE_ARN` | (derived) | Override Step Functions ARN in portal |
-| `HIVEFLOW_SPREADSHEET_MAX_SAMPLE_BYTES` | `536870912` (512 MiB) | Max raw sample size for induction |
-| `HIVEFLOW_SPREADSHEET_ORACLE_PROMPT_BYTES` | `2097152` (2 MiB) | Max bytes sent to oracle / synthesize prompts |
-| `AWS_REGION` / `AWS_DEFAULT_REGION` | `us-east-2` | Bedrock and Step Functions region |
+The board supports a bulk **"Approve all"** per lane (fans out to the same single-table approve call the card's own button would use) and **drag-and-drop**: dropping a card on the Discarded lane discards it; dropping it on any lane strictly to the right of its current one approves it; anything else is a silent no-op.
 
----
+## Deterministic recipe replay
+
+Once every table in a file is terminal (approved or discarded), `file_recipe.compile_file_recipe` keys the outcome (region + schema per table, or "discarded") to a whole-file shape signature. A later upload whose shape matches replays the recipe with **zero new AI calls** — but always lands in a to-confirm review state (`pending_review`/`pending_transform_review`), never auto-approved; a human still confirms before materialization. Likewise, `table_recipe.py` keys a table's *transformation* to its own input-shape hash, independent of which file it came from, so a table with a familiar shape in a brand-new file skips phase 2's AI call too. A phase-2 discard (which happens after the file recipe was already compiled at phase-1 completion) is captured by recompiling the file recipe when the job actually finishes, so it's remembered on the next re-upload as well. An explicit "Force re-run" button ignores a matched recipe and goes through full review again.
 
 ## Local development
 
-```powershell
-# From repo root — editable install of all packages
-.\scripts\install_dev.ps1
-
-# Run tests (no Bedrock; invoke=False in unit tests)
-cd packages/hiveflow-connectors
-pytest tests/test_spreadsheet_engine.py -v
+```
+uvicorn hiveflow.spreadsheet_lab.web.app:create_spreadsheet_lab_app --factory --reload
 ```
 
-Minimal local pipeline:
-
-```python
-import os
-from pathlib import Path
-
-os.environ["HIVEFLOW_DATA_DIR"] = "/tmp/hiveflow-data"
-
-from hiveflow.spreadsheet.jobs import (
-    create_job, store_upload, run_pipeline, load_report,
-)
-
-workbook = Path("sample.xlsx")
-job = create_job(filename=workbook.name, username="dev")
-store_upload(job["job_id"], filename=workbook.name, body=workbook.read_bytes())
-run_pipeline(job["job_id"])
-report = load_report(job["job_id"])
-```
-
-Or call stages individually: `run_parse` → `run_profile` → `run_interpret` → `run_propose`.
-
-Use `hiveflow.spreadsheet.handlers.pipeline_handler` as a single Lambda entry point for dev convenience.
-
----
-
-## Deployed infrastructure
-
-`create_spreadsheet_pipeline` in `infra/spreadsheet_pipeline.py` provisions:
-
-| Resource | Handler / name |
-|---|---|
-| Parse Lambda | `hiveflow.spreadsheet.handlers.parse_handler` |
-| Profile Lambda | `hiveflow.spreadsheet.handlers.profile_handler` |
-| Interpret Lambda | `hiveflow.spreadsheet.handlers.interpret_handler` |
-| Propose-prepare Lambda | `hiveflow.spreadsheet.handlers.propose_prepare_handler` (plain zip — no Bedrock) |
-| Propose-table Lambda | `hiveflow.spreadsheet.handlers.propose_table_handler` (Agent SDK container image; one invocation per table, fanned out by the Map state below) |
-| Propose-finalize Lambda | `hiveflow.spreadsheet.handlers.propose_finalize_handler` (plain zip — no Bedrock) |
-| State machine | `{company}-{env}-all-spreadsheet_analyze` |
-
-Chain: **Parse → Profile → Interpret → Propose-prepare → Map(Propose-table, max concurrency 4) → Propose-finalize**. Interpret and propose-table Lambdas need Bedrock invoke permissions. All Lambdas read/write the data bucket.
-
----
-
-## Portal API
-
-| Endpoint | Method | Purpose |
-|---|---|---|
-| `/portal/semantics/source-docs` | GET/POST | Main UI (source `sse`); form actions for upload, sheet selection, approve, reject, chat |
-| `/api/spreadsheet-engine/status` | GET | Job status and pipeline stage progress (`job_id` query param) |
-
-Form actions (POST to the source-docs page) include upload, approve/reject transformation, approve table, approve/reject/refresh lake joins, complete reload, schema rewrite, and table chat. See `spreadsheet_engine/service.py` for the full action surface.
-
----
-
-## Design notes
-
-**Deterministic replay.** Approved transformations are stored in the catalog and knowledge base. Re-uploads validate against them without calling AI when shapes match. Silver materialization always replays the stored steps — Bedrock is not invoked after approval.
-
-**Messy spreadsheets.** Price lists and similar exports often use grouped rows (item on one line, unit of measure and price on the next). The profiler flags these via `key_candidates` with high null rates; `needs_structural_cleaning` triggers the induce path (`group_rows` + `coalesce_columns`).
-
-**Source Browser integration.** `sse` is registered as a virtual reference source alongside connector sources (`dbc`, etc.). Spreadsheet Engine does not use the MS Learn source-docs gold pipeline — it owns its catalog under `governance/spreadsheet_engine/`.
-
-**Tests.** `packages/hiveflow-connectors/tests/test_spreadsheet_engine.py` covers parsing (including report preambles), profiling, transforms, catalog approval, silver materialization, reload validation, and grouped-row induction. Portal rendering tests live in `packages/hiveflow-portal/tests/test_spreadsheet_engine.py`.
+Every request still resolves a tenant bucket from `config.yaml`'s client registry (`tenant.tenant_scope` isn't skipped locally), so a working `platform.environments.<env>.ui.portal.clients.<id>.reporting_company` entry is needed even off Lambda — only the STS assume-role call itself is skipped (`tenant_credentials` is a no-op unless `HIVEFLOW_TENANT_ASSUME_ROLE=1` or actually running on Lambda), falling back to whatever the local AWS credential chain provides. Auth still requires a valid `hiveflow_portal_session` cookie from a locally-running portal, or a stubbed one signed with the same `HIVEFLOW_PORTAL_SESSION_SECRET`.

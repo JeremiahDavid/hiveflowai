@@ -1,15 +1,15 @@
-"""Spreadsheet Engine — Excel parse, profile, and Bedrock interpretation."""
+"""Spreadsheet Engine — low-level substrate (parse/sample/transform/materialize/
+synthesize) reused by ``hiveflow.spreadsheet_lab``, the sole remaining
+orchestration layer for spreadsheet ingestion (see that package)."""
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from hiveflow.spreadsheet.interpret import interpret_tables
     from hiveflow.spreadsheet.parser import parse_workbook
-    from hiveflow.spreadsheet.profiler import profile_tables
 
-__all__ = ["parse_workbook", "profile_tables", "interpret_tables"]
+__all__ = ["parse_workbook"]
 
 
 def __getattr__(name: str):
@@ -17,12 +17,4 @@ def __getattr__(name: str):
         from hiveflow.spreadsheet.parser import parse_workbook
 
         return parse_workbook
-    if name == "profile_tables":
-        from hiveflow.spreadsheet.profiler import profile_tables
-
-        return profile_tables
-    if name == "interpret_tables":
-        from hiveflow.spreadsheet.interpret import interpret_tables
-
-        return interpret_tables
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

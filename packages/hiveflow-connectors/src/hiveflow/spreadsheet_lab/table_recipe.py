@@ -12,7 +12,7 @@ from __future__ import annotations
 from typing import Any
 
 from hiveflow.storage.blobstore import read_json, resolve_blob_location, write_json
-from hiveflow.storage.paths import spreadsheet_lab_table_recipe_key
+from hiveflow.storage.paths import spreadsheet_engine_table_recipe_key
 
 RECIPE_KIND = "spreadsheet_lab_table_recipe"
 
@@ -21,7 +21,7 @@ def find_matching_table_recipe(input_shape: dict[str, Any]) -> dict[str, Any] | 
     shape_hash = str((input_shape or {}).get("shape_hash") or "")
     if not shape_hash:
         return None
-    return read_json(resolve_blob_location(), spreadsheet_lab_table_recipe_key(shape_hash))
+    return read_json(resolve_blob_location(), spreadsheet_engine_table_recipe_key(shape_hash))
 
 
 def compile_table_recipe(table: dict[str, Any]) -> dict[str, Any]:
@@ -38,5 +38,5 @@ def compile_table_recipe(table: dict[str, Any]) -> dict[str, Any]:
         "source_table_id": table.get("table_id"),
         "transformation": table.get("transformation") or {"version": 1, "steps": []},
     }
-    write_json(resolve_blob_location(), spreadsheet_lab_table_recipe_key(shape_hash), recipe)
+    write_json(resolve_blob_location(), spreadsheet_engine_table_recipe_key(shape_hash), recipe)
     return recipe

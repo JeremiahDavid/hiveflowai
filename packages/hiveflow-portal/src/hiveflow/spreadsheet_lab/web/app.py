@@ -1,8 +1,9 @@
-"""Spreadsheet Lab UI — a small, self-contained FastAPI app.
+"""Spreadsheet Engine UI — a small, self-contained FastAPI app.
 
 Deliberately not part of the production portal's Werkzeug app or its
-2,700+ line ``routes.py`` — this is its own app, its own routes, its own
-templates, matching the "separate, parallel process" the sandbox is for.
+2,700+ line ``routes.py`` — its own app, its own routes, its own templates,
+sharing only the portal's session/tenant machinery (see ``auth.py``/
+``tenant.py``) rather than being mounted in-process.
 """
 
 from __future__ import annotations
@@ -10,17 +11,25 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import FastAPI, Form, Request, UploadFile
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 
 from hiveflow.spreadsheet_lab import clean_review, extract_review, intake, store
-from hiveflow.spreadsheet_lab.web.auth import (
-    SESSION_COOKIE_NAME,
-    auth_required,
-    is_session_valid,
-    make_session_cookie_value,
-    verify_login,
-)
+from hiveflow.spreadsheet_lab.web.auth import portal_login_url, portal_session_from_request
 from hiveflow.spreadsheet_lab.web.templating import render_template
+from hiveflow.spreadsheet_lab.web.tenant import TenantUnresolved, tenant_scope
+
+# Static assets borrowed directly from the real portal's theme (see
+# packages/hiveflow-portal/src/hiveflow/dna/web/static/) so this app's look
+# matches it exactly and can't drift out of sync — both packages already live
+# in hiveflow-portal, so this is a plain file read, not a new dependency.
+# Whitelisted by filename to keep this a fixed, reviewable set rather than an
+# arbitrary passthrough into another package's directory.
+_DNA_STATIC_ASSETS: dict[str, str] = {
+    "theme.css": "text/css",
+    "hiveflowai-logo.svg": "image/svg+xml",
+    "hiveflowai-logo-reversed.svg": "image/svg+xml",
+    "hiveflowai-logo-mono.svg": "image/svg+xml",
+}
 
 
 # Ordered left-to-right; a table's current (phase, status) maps to exactly one
@@ -65,6 +74,21 @@ def _lane_for_table(table: dict[str, Any]) -> str:
     return "extracting"
 
 
+def _layout_ctx(request: Request) -> dict[str, Any]:
+    """Chrome context every full-page template needs: the signed-in
+    username and a link back to the real portal (this app owns no session
+    of its own to log out of — see auth.py)."""
+    import os
+
+    session = portal_session_from_request(request)
+    primary_site = os.getenv("HIVEFLOW_PRIMARY_SITE_URL", "").strip().rstrip("/")
+    return {
+        "username": session.username if session else "",
+        "portal_url": primary_site or "/",
+        "logout_url": f"{primary_site}/portal/logout" if primary_site else "/",
+    }
+
+
 def _board_lanes(tables: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Group tables into Kanban lanes for the job-detail board."""
     grouped: dict[str, list[dict[str, Any]]] = {key: [] for key, _label in _LANE_DEFS}
@@ -82,79 +106,66 @@ def _board_lanes(tables: list[dict[str, Any]]) -> list[dict[str, Any]]:
     ]
 
 
-def _safe_next(path: str) -> str:
-    """Only ever redirect back to a same-site relative path — a `next` value
-    is user-controlled (query/form input), so guard against it being used as
-    an open redirect."""
-    if path.startswith("/") and not path.startswith("//"):
-        return path
-    return "/"
-
-
 def create_spreadsheet_lab_app() -> FastAPI:
-    app = FastAPI(title="Spreadsheet Lab", docs_url=None, redoc_url=None, openapi_url=None)
+    app = FastAPI(title="Spreadsheet Engine", docs_url=None, redoc_url=None, openapi_url=None)
 
     @app.middleware("http")
     async def _session_auth(request: Request, call_next: Any) -> Any:
-        if request.url.path in ("/healthz", "/login") or not auth_required():
+        if request.url.path == "/healthz" or request.url.path.startswith("/static/"):
             return await call_next(request)
-        if is_session_valid(request.cookies.get(SESSION_COOKIE_NAME)):
-            return await call_next(request)
-        if request.method == "GET":
-            return RedirectResponse(f"/login?next={_safe_next(request.url.path)}", status_code=303)
-        return JSONResponse({"error": "unauthorized"}, status_code=401)
+        session = portal_session_from_request(request)
+        if session is None:
+            if request.method == "GET":
+                return RedirectResponse(portal_login_url(str(request.url)), status_code=303)
+            return JSONResponse({"error": "unauthorized"}, status_code=401)
+        try:
+            with tenant_scope(session.client_id) as company:
+                request.state.company = company
+                return await call_next(request)
+        except TenantUnresolved as exc:
+            return JSONResponse({"error": str(exc)}, status_code=403)
 
     @app.get("/healthz")
     async def healthz() -> JSONResponse:  # pragma: no cover - trivial
-        return JSONResponse({"ok": True, "service": "spreadsheet-lab"})
+        return JSONResponse({"ok": True, "service": "spreadsheet-engine"})
 
-    @app.get("/login", response_class=HTMLResponse)
-    async def login_form(next: str = "/") -> str:
-        return render_template("login.html", next=_safe_next(next), error=None)
+    @app.get("/static/{filename}")
+    async def dna_static(filename: str) -> Response:  # pragma: no cover - static passthrough
+        content_type = _DNA_STATIC_ASSETS.get(filename)
+        if not content_type:
+            return Response(status_code=404)
+        from importlib.resources import files
 
-    @app.post("/login")
-    async def login_submit(
-        username: str = Form(...), password: str = Form(...), next: str = Form("/")
-    ) -> Any:
-        safe_next = _safe_next(next)
-        if not verify_login(username, password):
-            return HTMLResponse(
-                render_template("login.html", next=safe_next, error="Invalid username or password."),
-                status_code=401,
-            )
-        response = RedirectResponse(safe_next, status_code=303)
-        response.set_cookie(
-            SESSION_COOKIE_NAME,
-            make_session_cookie_value(username),
-            httponly=True,
-            secure=True,
-            samesite="lax",
-            max_age=60 * 60 * 12,
-        )
-        return response
+        data = (files("hiveflow.dna.web") / "static" / filename).read_bytes()
+        return Response(data, media_type=content_type, headers={"Cache-Control": "public, max-age=3600"})
 
     @app.get("/", response_class=HTMLResponse)
-    async def index() -> str:
+    async def index(request: Request) -> str:
         jobs = store.list_jobs(limit=25)
-        return render_template("index.html", jobs=jobs)
+        return render_template("index.html", jobs=jobs, **_layout_ctx(request))
 
     @app.post("/upload")
-    async def upload(file: UploadFile) -> RedirectResponse:
+    async def upload(request: Request, file: UploadFile) -> RedirectResponse:
         filename = file.filename or "workbook.xlsx"
         body = await file.read()
-        job = intake.create_job(filename=filename, username="")
+        session = portal_session_from_request(request)
+        username = session.username if session else ""
+        company = str(getattr(request.state, "company", "") or "")
+        job = intake.create_job(filename=filename, username=username, company=company)
         intake.store_upload(job["job_id"], filename=filename, body=body)
         intake.run_parse(job["job_id"])
         return RedirectResponse(f"/jobs/{job['job_id']}", status_code=303)
 
     @app.get("/jobs/{job_id}", response_class=HTMLResponse)
-    async def job_detail(job_id: str) -> str:
+    async def job_detail(request: Request, job_id: str) -> str:
         job = store.load_job(job_id)
         if not job:
-            return render_template("index.html", jobs=store.list_jobs(limit=25))
+            return render_template("index.html", jobs=store.list_jobs(limit=25), **_layout_ctx(request))
         tables = store.load_tables(job_id)
         lanes = _board_lanes(tables)
-        return render_template("job_detail.html", job=job, tables=tables, lanes=lanes)
+        return render_template(
+            "job_detail.html", job=job, tables=tables, lanes=lanes, **_layout_ctx(request)
+        )
 
     @app.post("/jobs/{job_id}/force-rerun")
     async def force_rerun(job_id: str) -> RedirectResponse:

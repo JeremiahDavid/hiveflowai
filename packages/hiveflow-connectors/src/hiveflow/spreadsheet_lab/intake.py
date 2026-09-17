@@ -15,8 +15,8 @@ from hiveflow.spreadsheet_lab import extract_agent, file_recipe, store, worker
 _logger = logging.getLogger(__name__)
 
 
-def create_job(*, filename: str, username: str = "") -> dict[str, Any]:
-    return store.create_job(filename=filename, username=username)
+def create_job(*, filename: str, username: str = "", company: str = "") -> dict[str, Any]:
+    return store.create_job(filename=filename, username=username, company=company)
 
 
 def store_upload(job_id: str, *, filename: str, body: bytes) -> str:

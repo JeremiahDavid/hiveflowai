@@ -3,43 +3,104 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}Spreadsheet Lab{% endblock %}</title>
-  <style>
-    :root { color-scheme: light dark; }
-    body { font-family: -apple-system, Segoe UI, Roboto, sans-serif; margin: 0; padding: 24px;
-           background: #f7f7f8; color: #1a1a1a; }
-    a { color: #0f766e; }
-    .wrap { max-width: 960px; margin: 0 auto; }
-    header.page { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 24px; }
-    header.page h1 { font-size: 1.4rem; margin: 0; }
-    .card { background: #fff; border: 1px solid #e5e5e5; border-radius: 8px; padding: 20px; margin-bottom: 16px; }
-    .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 0.75rem;
-             font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
-    .badge.pending_review { background: #fef3c7; color: #92400e; }
-    .badge.processing { background: #dbeafe; color: #1e40af; }
-    .badge.approved { background: #dcfce7; color: #166534; }
-    .badge.discarded { background: #f3f4f6; color: #6b7280; }
-    .badge.rejected_retry { background: #fee2e2; color: #991b1b; }
-    table.schema { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 0.9rem; }
-    table.schema th, table.schema td { text-align: left; padding: 4px 8px; border-bottom: 1px solid #eee; }
-    textarea { width: 100%; box-sizing: border-box; min-height: 60px; font-family: inherit; }
-    .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
-    button, input[type=submit] { padding: 6px 14px; border-radius: 6px; border: 1px solid #ccc;
-           background: #fff; color: #1a1a1a; cursor: pointer; font-size: 0.9rem; }
-    button.primary { background: #0f766e; color: #fff; border-color: #0f766e; }
-    button.danger { background: #fff; color: #b91c1c; border-color: #f3c4c4; }
-    .muted { color: #6b7280; font-size: 0.85rem; }
-    .feedback-entry { border-left: 2px solid #ddd; padding-left: 8px; margin-bottom: 6px; font-size: 0.85rem; }
-    .empty { color: #6b7280; font-style: italic; }
-  </style>
+  <meta name="theme-color" content="#F1EEE3">
+  <title>{% block title %}Spreadsheet Engine{% endblock %} · hiveflowAI</title>
+  <link rel="icon" href="/static/hiveflowai-logo-mono.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/theme.css">
+  <script>
+  (function () {
+    try {
+      var saved = window.localStorage.getItem("hiveflow-theme");
+      if (saved === "light" || saved === "dark") {
+        document.documentElement.setAttribute("data-theme", saved);
+      }
+    } catch (err) { /* ignore */ }
+  })();
+  </script>
 </head>
 <body>
-  <div class="wrap">
-    <header class="page">
-      <h1><a href="/" style="text-decoration:none;color:inherit;">Spreadsheet Lab</a></h1>
-      <span class="muted">sandbox — not production data</span>
+  <div class="shell">
+    <header class="topbar">
+      <div class="topbar-inner">
+        <a class="brand" href="{{ portal_url }}">
+          <img class="brand-icon-light" src="/static/hiveflowai-logo.svg" alt="hiveflowAI symbol" width="36" height="36">
+          <img class="brand-icon-dark" src="/static/hiveflowai-logo-reversed.svg" alt="hiveflowAI symbol" width="36" height="36">
+          <div class="brand-text">
+            <div class="brand-name">hiveflow<span>AI</span></div>
+            <div class="brand-tagline">Spreadsheet Engine</div>
+          </div>
+        </a>
+        <div class="topbar-main">
+          <div class="nav-actions">
+            <nav class="nav" aria-label="Primary">
+              <a class="nav-link" href="/">Jobs</a>
+              <a class="nav-link" href="{{ portal_url }}">Portal</a>
+            </nav>
+            {% if username %}
+            <span class="badge">{{ username }}</span>
+            <a class="nav-link" href="{{ logout_url }}">Sign out</a>
+            {% endif %}
+            <button type="button" class="theme-toggle" id="themeToggle" aria-label="Switch to dark theme">
+              <span class="theme-toggle-icon" aria-hidden="true">☾</span>
+            </button>
+          </div>
+        </div>
+      </div>
     </header>
-    {% block content %}{% endblock %}
+    <main>
+      <div class="portal-content">{% block content %}{% endblock %}</div>
+    </main>
+    <footer class="footer">
+      <span>Spreadsheet Engine</span>
+      <span>Powered by HiveFlow DNA</span>
+    </footer>
   </div>
+  <script>
+  (function () {
+    var STORAGE_KEY = "hiveflow-theme";
+    var root = document.documentElement;
+    var toggle = document.getElementById("themeToggle");
+    if (!toggle) return;
+
+    var media = window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : null;
+
+    function systemPrefersDark() {
+      return !!(media && media.matches);
+    }
+
+    function currentTheme() {
+      var explicit = root.getAttribute("data-theme");
+      if (explicit === "light" || explicit === "dark") return explicit;
+      return systemPrefersDark() ? "dark" : "light";
+    }
+
+    function syncChrome(theme) {
+      toggle.setAttribute(
+        "aria-label",
+        theme === "dark" ? "Switch to light theme" : "Switch to dark theme"
+      );
+      var icon = toggle.querySelector(".theme-toggle-icon");
+      if (icon) icon.textContent = theme === "dark" ? "☀" : "☾";
+      var meta = document.querySelector('meta[name="theme-color"]');
+      if (meta) meta.setAttribute("content", theme === "dark" ? "#17150F" : "#F1EEE3");
+    }
+
+    syncChrome(currentTheme());
+    if (media && media.addEventListener) {
+      media.addEventListener("change", function () {
+        if (!root.getAttribute("data-theme")) syncChrome(currentTheme());
+      });
+    }
+
+    toggle.addEventListener("click", function () {
+      var next = currentTheme() === "dark" ? "light" : "dark";
+      root.setAttribute("data-theme", next);
+      syncChrome(next);
+      try {
+        window.localStorage.setItem(STORAGE_KEY, next);
+      } catch (err) { /* ignore */ }
+    });
+  })();
+  </script>
 </body>
 </html>

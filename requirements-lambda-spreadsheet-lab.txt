@@ -1,10 +1,15 @@
-# Spreadsheet Lab sandbox UI + worker — one Lambda handles both API Gateway
+# Spreadsheet Engine UI + worker — one Lambda handles both API Gateway
 # requests (FastAPI/Mangum) and the async self-invoke table-task path
 # (hiveflow.spreadsheet_lab.worker). Deliberately NOT `-r requirements.txt`:
-# no werkzeug/a2wsgi (this app is never mounted into the legacy WSGI portal),
-# no lxml/cryptography/httpx/intuit-oauth (BC/QBO connector auth, unrelated
+# no a2wsgi (this app is never mounted in-process into the portal), no
+# lxml/cryptography/httpx/intuit-oauth (BC/QBO connector auth, unrelated
 # here). List only what the app and the reused hiveflow.spreadsheet/_agent_runtime
 # + hiveflow_spreadsheet_parser modules actually import, at runtime, transitively.
+#
+# werkzeug IS needed here despite this app being FastAPI, not Werkzeug: auth.py
+# imports hiveflow.dna.web.portal.auth directly to validate the real portal's
+# session cookie (session_from_request duck-types across both frameworks'
+# Request objects) rather than re-implementing session signing/verification.
 #
 # Deliberately NO pyarrow here — bundled alongside pandas/pydantic/python-calamine
 # it blows past Lambda's 250MB unzipped limit (confirmed by a real deploy
@@ -17,6 +22,7 @@ botocore>=1.35.0
 pyyaml>=6.0.0
 typing_extensions>=4.12.0
 openpyxl>=3.1.5
+werkzeug>=3.1.0
 
 # Web app.
 fastapi>=0.115.0

@@ -1,79 +1,58 @@
 {% extends "layout.html" %}
-{% block title %}Spreadsheet Lab — {{ job.filename }}{% endblock %}
+{% block title %}{{ job.filename }}{% endblock %}
 {% block content %}
-  <style>
-    .board { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 8px; align-items: flex-start; }
-    .lane { flex: 1 1 0; min-width: 220px; background: #f0f0f2; border-radius: 8px; padding: 10px;
-            display: flex; flex-direction: column; gap: 8px; }
-    .lane.drag-over { background: #dbeafe; }
-    .lane-head { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; margin-bottom: 2px; }
-    .lane-head h3 { margin: 0; font-size: 0.8rem; color: #4b5563; text-transform: uppercase;
-               letter-spacing: 0.03em; }
-    .lane-approve-all { font-size: 0.68rem; padding: 2px 8px; white-space: nowrap; }
-    .lane .lane-empty { color: #9ca3af; font-size: 0.8rem; font-style: italic; padding: 8px 2px; }
-    .card { background: #fff; border: 1px solid #e5e5e5; border-radius: 6px; padding: 10px 12px;
-            cursor: pointer; transition: box-shadow 0.1s ease, border-color 0.1s ease; }
-    .card:hover { border-color: #0f766e; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
-    .card[draggable="true"] { cursor: grab; }
-    .card.dragging { opacity: 0.4; }
-    .card.discarded-card { opacity: 0.7; }
-    .card .card-title { font-weight: 600; font-size: 0.9rem; }
-    .card .card-sub { color: #6b7280; font-size: 0.78rem; margin-top: 2px; }
-    .card .card-badge { display: inline-block; margin-top: 6px; }
-    .modal-backdrop { display: none; position: fixed; inset: 0; background: rgba(17,17,17,0.45);
-                       z-index: 50; align-items: flex-start; justify-content: center; padding: 5vh 16px; overflow-y: auto; }
-    .modal-backdrop.open { display: flex; }
-    .modal-panel { background: #fff; border-radius: 10px; max-width: 720px; width: 100%;
-                   padding: 24px; position: relative; margin-bottom: 5vh; }
-    .modal-close { position: absolute; top: 12px; right: 14px; border: none; background: none;
-                   font-size: 1.4rem; line-height: 1; cursor: pointer; color: #6b7280; padding: 4px 8px; }
-    .modal-close:hover { color: #111; }
-    .modal-panel h2 { margin: 0 0 4px; font-size: 1.1rem; }
-  </style>
+  {% macro status_class(status, phase) -%}
+    {%- if status == "approved" or phase == "done" -%}badge accent
+    {%- elif status == "discarded" -%}badge se-status-muted
+    {%- else -%}badge se-status-pending
+    {%- endif -%}
+  {%- endmacro %}
+
+  <header class="page-header">
+    <div class="eyebrow">Spreadsheet Engine</div>
+    <h1>{{ job.filename }}</h1>
+    <p class="subtitle">job {{ job.job_id }}</p>
+  </header>
 
   <div class="card">
-    <div class="row" style="justify-content: space-between;">
-      <div>
-        <h2 style="margin: 0;">{{ job.filename }}</h2>
-        <p class="muted" style="margin: 4px 0 0;">job {{ job.job_id }}</p>
-      </div>
-      <span class="badge {{ job.status }}">{{ job.status }}</span>
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:1rem;">
+      <span class="{{ status_class(job.status, '') }}">{{ job.status }}</span>
     </div>
     {% if job.auto_replayed %}
-      <p class="muted">
+      <p class="form-hint" style="margin-top:0.75rem;">
         This file matched a saved recipe (id <code>{{ job.matched_file_recipe_id }}</code>) — table
         extraction and cleaning were replayed automatically with no AI calls. Previously-approved
         tables still need a quick confirm below; previously-discarded tables are already in the
         Discarded lane.
       </p>
       <form method="post" action="/jobs/{{ job.job_id }}/force-rerun">
-        <button type="submit">Force re-run (ignore the matched recipe)</button>
+        <button class="button" type="submit">Force re-run (ignore the matched recipe)</button>
       </form>
     {% endif %}
     {% if job.error %}
-      <p style="color:#b91c1c;">{{ job.error }}</p>
+      <p class="form-error" style="margin-top:0.75rem;">{{ job.error }}</p>
     {% endif %}
   </div>
 
   {% if not tables and job.status not in ("no_tables_found", "error") %}
-    <div class="card"><p class="empty">Parsing — tables will appear here shortly.</p></div>
+    <div class="empty">Parsing — tables will appear here shortly.</div>
   {% endif %}
 
   {% if tables %}
-    <div class="board">
+    <div class="se-board">
       {% for lane in lanes %}
-        <div class="lane" data-lane-key="{{ lane.key }}" data-lane-order="{{ lane.order }}"
+        <div class="se-board-lane" data-lane-key="{{ lane.key }}" data-lane-order="{{ lane.order }}"
              ondragover="onLaneDragOver(event)" ondragleave="onLaneDragLeave(event)" ondrop="onLaneDrop(event)">
-          <div class="lane-head">
+          <div class="se-board-lane-head">
             <h3>{{ lane.label }} ({{ lane.tables | length }})</h3>
             {% if lane.approve_status and (lane.tables | selectattr("status", "equalto", lane.approve_status) | list | length > 0) %}
               <form method="post" action="/jobs/{{ job.job_id }}/approve-all/{{ lane.key }}">
-                <button type="submit" class="primary lane-approve-all">Approve all</button>
+                <button type="submit" class="button primary se-board-lane-approve-all">Approve all</button>
               </form>
             {% endif %}
           </div>
           {% if not lane.tables %}
-            <div class="lane-empty">Empty</div>
+            <div class="se-board-lane-empty">Empty</div>
           {% endif %}
           {% for table in lane.tables %}
             {% set forward_url = "" %}
@@ -88,7 +67,7 @@
               {% set forward_url = "/jobs/" ~ job.job_id ~ "/tables/" ~ table.table_id ~ "/approve-transformation" %}
               {% set discard_url = "/jobs/" ~ job.job_id ~ "/tables/" ~ table.table_id ~ "/discard-clean" %}
             {% endif %}
-            <div class="card{% if lane.key == 'discarded' %} discarded-card{% endif %}"
+            <div class="se-board-tile{% if lane.key == 'discarded' %} is-discarded{% endif %}"
                  data-table-id="{{ table.table_id }}"
                  data-lane-order="{{ lane.order }}"
                  {% if forward_url %}data-approve-url="{{ forward_url }}"{% endif %}
@@ -96,10 +75,10 @@
                  draggable="{{ 'true' if (forward_url or discard_url) else 'false' }}"
                  ondragstart="onCardDragStart(event)"
                  ondragend="onCardDragEnd(event)"
-                 onclick="document.getElementById('modal-{{ table.table_id }}').classList.add('open')">
-              <div class="card-title">{{ table.entity_name or table.table_id }}</div>
-              <div class="card-sub">{{ table.table_id }} &middot; sheet: {{ table.sheet }}</div>
-              <span class="badge {{ table.status }} card-badge">{{ table.status }}</span>
+                 onclick="document.getElementById('modal-{{ table.table_id }}').classList.add('is-open')">
+              <div class="se-board-tile-title">{{ table.entity_name or table.table_id }}</div>
+              <div class="se-board-tile-sub">{{ table.table_id }} &middot; sheet: {{ table.sheet }}</div>
+              <span class="{{ status_class(table.status, table.phase) }} se-board-tile-badge">{{ table.status }}</span>
             </div>
           {% endfor %}
         </div>
@@ -108,150 +87,159 @@
   {% endif %}
 
   {% for table in tables %}
-    <div class="modal-backdrop" id="modal-{{ table.table_id }}" onclick="if (event.target === this) this.classList.remove('open')">
-      <div class="modal-panel">
-        <button class="modal-close" type="button" aria-label="Close"
-                onclick="document.getElementById('modal-{{ table.table_id }}').classList.remove('open')">&times;</button>
+    <div class="se-modal-backdrop" id="modal-{{ table.table_id }}" onclick="if (event.target === this) this.classList.remove('is-open')">
+      <div class="se-modal-panel">
+        <button class="se-modal-close" type="button" aria-label="Close"
+                onclick="document.getElementById('modal-{{ table.table_id }}').classList.remove('is-open')">&times;</button>
         <h2>{{ table.entity_name or table.table_id }}</h2>
-        <p class="muted" style="margin-top:0;">
+        <p class="subtitle" style="margin-top:0;">
           {{ table.table_id }} &middot; sheet: {{ table.sheet }}
-          <span class="badge {{ table.status }}">{{ table.phase }} / {{ table.status }}</span>
+          <span class="{{ status_class(table.status, table.phase) }}">{{ table.phase }} / {{ table.status }}</span>
         </p>
 
         {% if table.status == "processing" %}
-          <p class="muted">Agent is working on this table&hellip;</p>
+          <p class="form-hint">Agent is working on this table&hellip;</p>
 
         {% elif table.phase == "extract" %}
           {% if table.extract_proposal %}
             {% set proposal = table.extract_proposal %}
             <p><strong>{{ proposal.entity_name }}</strong> — {{ proposal.purpose }}</p>
-            <p class="muted">Grain: {{ proposal.grain }}</p>
+            <p class="form-hint">Grain: {{ proposal.grain }}</p>
             {% if proposal.schema %}
-              <table class="schema">
-                <thead><tr><th>Column</th><th>Type</th><th>Description</th></tr></thead>
-                <tbody>
-                  {% for col in proposal.schema %}
-                    <tr><td>{{ col.name }}</td><td>{{ col.type }}</td><td>{{ col.description or "" }}</td></tr>
-                  {% endfor %}
-                </tbody>
-              </table>
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>Column</th><th>Type</th><th>Description</th></tr></thead>
+                  <tbody>
+                    {% for col in proposal.schema %}
+                      <tr><td>{{ col.name }}</td><td>{{ col.type }}</td><td>{{ col.description or "" }}</td></tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
             {% endif %}
             {% if proposal.corrected_region %}
-              <p class="muted">Region corrected from the original detected boundaries.</p>
+              <p class="form-hint">Region corrected from the original detected boundaries.</p>
             {% endif %}
             {% if proposal.notes %}
-              <ul class="muted">
+              <ul class="plain">
                 {% for note in proposal.notes %}<li>{{ note }}</li>{% endfor %}
               </ul>
             {% endif %}
           {% else %}
-            <p class="empty">Waiting on the agent&hellip;</p>
+            <div class="empty">Waiting on the agent&hellip;</div>
           {% endif %}
 
         {% elif table.phase == "clean" and table.status == "pending_shape_review" and table.clean_goal %}
-          <p class="muted">Proposed cleaned shape ({{ table.clean_goal.row_count }} row(s)):</p>
-          <table class="schema">
-            <thead><tr>{% for h in table.clean_goal.headers %}<th>{{ h }}</th>{% endfor %}</tr></thead>
-            <tbody>
-              {% for row in table.clean_goal.rows[:10] %}
-                <tr>{% for cell in row %}<td>{{ cell }}</td>{% endfor %}</tr>
-              {% endfor %}
-            </tbody>
-          </table>
+          <p class="form-hint">Proposed cleaned shape ({{ table.clean_goal.row_count }} row(s)):</p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr>{% for h in table.clean_goal.headers %}<th>{{ h }}</th>{% endfor %}</tr></thead>
+              <tbody>
+                {% for row in table.clean_goal.rows[:10] %}
+                  <tr>{% for cell in row %}<td>{{ cell }}</td>{% endfor %}</tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
           {% if table.clean_shape_notes %}
-            <ul class="muted">{% for note in table.clean_shape_notes %}<li>{{ note }}</li>{% endfor %}</ul>
+            <ul class="plain">{% for note in table.clean_shape_notes %}<li>{{ note }}</li>{% endfor %}</ul>
           {% endif %}
 
         {% elif table.phase == "clean" and table.status == "pending_transform_review" %}
-          <p class="muted">Synthesized deterministic steps (confidence {{ table.transformation_confidence }}):</p>
-          <ul>
+          <p class="form-hint">Synthesized deterministic steps (confidence {{ table.transformation_confidence }}):</p>
+          <ul class="plain">
             {% for step in (table.transformation.steps or []) %}
               <li><code>{{ step.op }}</code>{% if step.key_column %} on <code>{{ step.key_column }}</code>{% endif %}</li>
             {% endfor %}
           </ul>
           {% if table.transformation_notes %}
-            <ul class="muted">{% for note in table.transformation_notes %}<li>{{ note }}</li>{% endfor %}</ul>
+            <ul class="plain">{% for note in table.transformation_notes %}<li>{{ note }}</li>{% endfor %}</ul>
           {% endif %}
 
         {% elif table.phase == "done" %}
           <p>Materialized{% if table.silver %} to <code>{{ table.silver.silver_parquet_key }}</code>
              ({{ table.silver.silver_row_count }} row(s)){% endif %}.</p>
           {% if table.silver and table.silver.silver_cast_issues %}
-            <ul class="muted">
+            <ul class="plain">
               {% for issue in table.silver.silver_cast_issues %}<li>{{ issue }}</li>{% endfor %}
             </ul>
           {% endif %}
           {% if table.silver and table.silver.silver_preview_rows %}
-            <p class="muted" style="margin-bottom:4px;">
+            <p class="form-hint" style="margin-bottom:0.4rem;">
               Output preview ({{ table.silver.silver_preview_rows | length }} of
               {{ table.silver.silver_row_count }} row(s)):
             </p>
-            <table class="schema">
-              <thead><tr>{% for h in table.silver.silver_preview_headers %}<th>{{ h }}</th>{% endfor %}</tr></thead>
-              <tbody>
-                {% for row in table.silver.silver_preview_rows %}
-                  <tr>{% for cell in row %}<td>{{ cell }}</td>{% endfor %}</tr>
-                {% endfor %}
-              </tbody>
-            </table>
+            <div class="table-wrap">
+              <table>
+                <thead><tr>{% for h in table.silver.silver_preview_headers %}<th>{{ h }}</th>{% endfor %}</tr></thead>
+                <tbody>
+                  {% for row in table.silver.silver_preview_rows %}
+                    <tr>{% for cell in row %}<td>{{ cell }}</td>{% endfor %}</tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
           {% endif %}
         {% endif %}
 
         {% if table.feedback_history %}
-          <div style="margin-top: 12px;">
-            <p class="muted" style="margin-bottom:4px;">Feedback history ({{ table.attempt_count }} attempt(s)):</p>
+          <div class="section" style="margin-top:1rem;">
+            <p class="section-title">Feedback history ({{ table.attempt_count }} attempt(s))</p>
             {% for entry in table.feedback_history %}
-              <div class="feedback-entry">{{ entry.text }} <span class="muted">— {{ entry.at }}</span></div>
+              <div class="se-feedback-entry">{{ entry.text }} — {{ entry.at }}</div>
             {% endfor %}
           </div>
         {% endif %}
 
         {% if table.phase == "extract" and table.status in ("pending_review", "rejected_retry") %}
-          <div class="row">
+          <div class="row" style="display:flex; gap:0.5rem; margin-top:1rem;">
             <form method="post" action="/jobs/{{ job.job_id }}/tables/{{ table.table_id }}/approve">
-              <button class="primary" type="submit">Approve</button>
+              <button class="button primary" type="submit">Approve</button>
             </form>
             <form method="post" action="/jobs/{{ job.job_id }}/tables/{{ table.table_id }}/discard">
-              <button class="danger" type="submit">Discard</button>
+              <button class="button danger" type="submit">Discard</button>
             </form>
           </div>
-          <form method="post" action="/jobs/{{ job.job_id }}/tables/{{ table.table_id }}/reject" style="margin-top: 8px;">
-            <textarea name="feedback" placeholder="What's wrong with this table's shape? Be specific about rows/columns."></textarea>
-            <div class="row">
-              <button type="submit">Reject with feedback &amp; retry</button>
+          <form method="post" action="/jobs/{{ job.job_id }}/tables/{{ table.table_id }}/reject" style="margin-top: 0.75rem;">
+            <div class="form-field">
+              <label>Reject with feedback &amp; retry</label>
+              <textarea name="feedback" placeholder="What's wrong with this table's shape? Be specific about rows/columns."></textarea>
             </div>
+            <button class="button" type="submit">Reject &amp; retry</button>
           </form>
 
         {% elif table.phase == "clean" and table.status == "pending_shape_review" %}
-          <div class="row">
+          <div class="row" style="display:flex; gap:0.5rem; margin-top:1rem;">
             <form method="post" action="/jobs/{{ job.job_id }}/tables/{{ table.table_id }}/approve-clean-shape">
-              <button class="primary" type="submit">Approve cleaned shape</button>
+              <button class="button primary" type="submit">Approve cleaned shape</button>
             </form>
             <form method="post" action="/jobs/{{ job.job_id }}/tables/{{ table.table_id }}/discard-clean">
-              <button class="danger" type="submit">Discard — not needed</button>
+              <button class="button danger" type="submit">Discard — not needed</button>
             </form>
           </div>
-          <form method="post" action="/jobs/{{ job.job_id }}/tables/{{ table.table_id }}/reject-clean-shape" style="margin-top: 8px;">
-            <textarea name="feedback" placeholder="What's wrong with the cleaned data?"></textarea>
-            <div class="row">
-              <button type="submit">Reject with feedback &amp; retry</button>
+          <form method="post" action="/jobs/{{ job.job_id }}/tables/{{ table.table_id }}/reject-clean-shape" style="margin-top: 0.75rem;">
+            <div class="form-field">
+              <label>Reject with feedback &amp; retry</label>
+              <textarea name="feedback" placeholder="What's wrong with the cleaned data?"></textarea>
             </div>
+            <button class="button" type="submit">Reject &amp; retry</button>
           </form>
 
         {% elif table.phase == "clean" and table.status == "pending_transform_review" %}
-          <div class="row">
+          <div class="row" style="display:flex; gap:0.5rem; margin-top:1rem;">
             <form method="post" action="/jobs/{{ job.job_id }}/tables/{{ table.table_id }}/approve-transformation">
-              <button class="primary" type="submit">Approve transformation</button>
+              <button class="button primary" type="submit">Approve transformation</button>
             </form>
             <form method="post" action="/jobs/{{ job.job_id }}/tables/{{ table.table_id }}/discard-clean">
-              <button class="danger" type="submit">Discard — not needed</button>
+              <button class="button danger" type="submit">Discard — not needed</button>
             </form>
           </div>
-          <form method="post" action="/jobs/{{ job.job_id }}/tables/{{ table.table_id }}/reject-transformation" style="margin-top: 8px;">
-            <textarea name="feedback" placeholder="What's wrong with these deterministic steps?"></textarea>
-            <div class="row">
-              <button type="submit">Reject with feedback &amp; retry</button>
+          <form method="post" action="/jobs/{{ job.job_id }}/tables/{{ table.table_id }}/reject-transformation" style="margin-top: 0.75rem;">
+            <div class="form-field">
+              <label>Reject with feedback &amp; retry</label>
+              <textarea name="feedback" placeholder="What's wrong with these deterministic steps?"></textarea>
             </div>
+            <button class="button" type="submit">Reject &amp; retry</button>
           </form>
         {% endif %}
       </div>
@@ -267,8 +255,8 @@
         }
         document.addEventListener("keydown", function (evt) {
           if (evt.key === "Escape") {
-            document.querySelectorAll(".modal-backdrop.open").forEach(function (el) {
-              el.classList.remove("open");
+            document.querySelectorAll(".se-modal-backdrop.is-open").forEach(function (el) {
+              el.classList.remove("is-open");
             });
           }
         });
@@ -287,30 +275,30 @@
         }
         evt.dataTransfer.effectAllowed = "move";
         evt.dataTransfer.setData("text/plain", card.getAttribute("data-table-id"));
-        card.classList.add("dragging");
+        card.classList.add("is-dragging");
       }
 
       function onCardDragEnd(evt) {
-        evt.currentTarget.classList.remove("dragging");
+        evt.currentTarget.classList.remove("is-dragging");
       }
 
       function onLaneDragOver(evt) {
         evt.preventDefault();
         evt.dataTransfer.dropEffect = "move";
-        evt.currentTarget.classList.add("drag-over");
+        evt.currentTarget.classList.add("is-drag-over");
       }
 
       function onLaneDragLeave(evt) {
-        evt.currentTarget.classList.remove("drag-over");
+        evt.currentTarget.classList.remove("is-drag-over");
       }
 
       function onLaneDrop(evt) {
         evt.preventDefault();
         var lane = evt.currentTarget;
-        lane.classList.remove("drag-over");
+        lane.classList.remove("is-drag-over");
         var tableId = evt.dataTransfer.getData("text/plain");
         if (!tableId) { return; }
-        var card = document.querySelector('.card[data-table-id="' + tableId + '"]');
+        var card = document.querySelector('.se-board-tile[data-table-id="' + tableId + '"]');
         if (!card) { return; }
         var sourceOrder = parseInt(card.getAttribute("data-lane-order"), 10);
         var targetOrder = parseInt(lane.getAttribute("data-lane-order"), 10);

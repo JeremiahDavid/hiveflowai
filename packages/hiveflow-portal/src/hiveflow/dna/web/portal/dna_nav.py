@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
 from hiveflow.dna.settings import DnaSettings
@@ -27,7 +28,6 @@ SideNavItem = tuple[str, str] | tuple[str, str, tuple[Any, ...]]
 
 
 _SOURCE_LABELS = {
-    "sse": "Spreadsheet Engine",
     "dbc": "Business Central",
     "qbo": "QuickBooks Online",
     "qbd": "QuickBooks Desktop",
@@ -53,10 +53,24 @@ def _catalog_nav_children(settings: DnaSettings) -> tuple[tuple[str, str], ...]:
     )
 
 
+def _spreadsheet_engine_nav_items() -> tuple[SideNavItem, ...]:
+    """Link to the Spreadsheet Engine's own subdomain (see
+    infra/spreadsheet_engine.py) — it's no longer a tab inside Source
+    Browser, just a portal-authenticated sibling app. Derived from the same
+    ``HIVEFLOW_PORTAL_COOKIE_DOMAIN`` the Lambda already carries for
+    cross-subdomain session sharing; omitted when that isn't configured
+    (local/dev with no multi-tenant domain wiring)."""
+    cookie_domain = os.getenv("HIVEFLOW_PORTAL_COOKIE_DOMAIN", "").strip()
+    if not cookie_domain:
+        return ()
+    return ((f"https://spreadsheet-engine{cookie_domain}/", "Spreadsheet Engine"),)
+
+
 def dna_section_nav(settings: DnaSettings | None) -> tuple[Any, ...]:
     if settings is None:
         return (
             (SOURCE_DOCS_INSPECTOR_ROOT, _SOURCE_BROWSER_LABEL),
+            *_spreadsheet_engine_nav_items(),
             (KPI_GENERATOR_ROOT, _KPI_GENERATOR_LABEL),
             (CATALOG_ROOT, _DNA_CATALOG_LABEL),
             (DATA_PROFILE_ROOT, _DATA_PROFILE_LABEL),
@@ -71,6 +85,7 @@ def dna_section_nav(settings: DnaSettings | None) -> tuple[Any, ...]:
     )
     return (
         (SOURCE_DOCS_INSPECTOR_ROOT, _SOURCE_BROWSER_LABEL),
+        *_spreadsheet_engine_nav_items(),
         (KPI_GENERATOR_ROOT, _KPI_GENERATOR_LABEL),
         catalog_item,
         (DATA_PROFILE_ROOT, _DATA_PROFILE_LABEL),

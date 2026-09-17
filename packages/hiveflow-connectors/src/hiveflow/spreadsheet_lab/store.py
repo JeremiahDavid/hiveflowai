@@ -24,13 +24,13 @@ from hiveflow.storage.blobstore import (
     write_json,
 )
 from hiveflow.storage.paths import (
-    spreadsheet_lab_job_key,
-    spreadsheet_lab_job_parse_key,
-    spreadsheet_lab_job_prefix,
-    spreadsheet_lab_job_table_key,
-    spreadsheet_lab_job_tables_prefix,
-    spreadsheet_lab_job_upload_key,
-    spreadsheet_lab_jobs_list_prefix,
+    spreadsheet_engine_job_key,
+    spreadsheet_engine_job_parse_key,
+    spreadsheet_engine_job_prefix,
+    spreadsheet_engine_job_table_key,
+    spreadsheet_engine_job_tables_prefix,
+    spreadsheet_engine_job_upload_key,
+    spreadsheet_engine_jobs_list_prefix,
 )
 
 JOB_KIND = "spreadsheet_lab_job"
@@ -68,7 +68,7 @@ def new_job_id() -> str:
 # ── job ──────────────────────────────────────────────────────────────────────
 
 
-def create_job(*, filename: str, username: str = "") -> dict[str, Any]:
+def create_job(*, filename: str, username: str = "", company: str = "") -> dict[str, Any]:
     job_id = new_job_id()
     now = _now_iso()
     job = {
@@ -79,6 +79,11 @@ def create_job(*, filename: str, username: str = "") -> dict[str, Any]:
         "created_at": now,
         "updated_at": now,
         "created_by": username,
+        # The tenant this job's data lives under — carried into async
+        # self-invoke/materialize Lambda payloads so those separate
+        # invocations can rebind to the right bucket/credentials (see
+        # worker._worker_tenant_scope). Empty in single-tenant/local setups.
+        "company": company,
         "file_shape_hash": "",
         "matched_file_recipe_id": "",
         "auto_replayed": False,
@@ -93,12 +98,12 @@ def save_job(job: dict[str, Any]) -> dict[str, Any]:
     if not job_id:
         raise ValueError("job_id is required")
     job["updated_at"] = _now_iso()
-    write_json(resolve_blob_location(), spreadsheet_lab_job_key(job_id), job)
+    write_json(resolve_blob_location(), spreadsheet_engine_job_key(job_id), job)
     return job
 
 
 def load_job(job_id: str) -> dict[str, Any] | None:
-    return read_json(resolve_blob_location(), spreadsheet_lab_job_key(job_id))
+    return read_json(resolve_blob_location(), spreadsheet_engine_job_key(job_id))
 
 
 def set_job_status(job_id: str, status: str, *, error: str = "") -> dict[str, Any]:
@@ -122,7 +127,7 @@ def list_jobs(limit: int = 50) -> list[dict[str, Any]]:
         client = s3_client()
         paginator = client.get_paginator("list_objects_v2")
         keys: list[str] = []
-        for page in paginator.paginate(Bucket=loc.bucket, Prefix=spreadsheet_lab_jobs_list_prefix()):
+        for page in paginator.paginate(Bucket=loc.bucket, Prefix=spreadsheet_engine_jobs_list_prefix()):
             for item in page.get("Contents") or []:
                 key = str(item.get("Key") or "")
                 if key.endswith("/job.json"):
@@ -136,12 +141,12 @@ def list_jobs(limit: int = 50) -> list[dict[str, Any]]:
         root = loc.data_dir
         from hiveflow.storage.paths import prefix_path
 
-        jobs_root = prefix_path(root, spreadsheet_lab_jobs_list_prefix())
+        jobs_root = prefix_path(root, spreadsheet_engine_jobs_list_prefix())
         if jobs_root.exists():
             for job_dir in sorted(jobs_root.iterdir(), reverse=True):
                 job_file = job_dir / "job.json"
                 if job_file.exists():
-                    payload = read_json(loc, spreadsheet_lab_job_key(job_dir.name))
+                    payload = read_json(loc, spreadsheet_engine_job_key(job_dir.name))
                     if payload:
                         jobs.append(payload)
     jobs.sort(key=lambda item: str(item.get("created_at") or ""), reverse=True)
@@ -152,7 +157,7 @@ def list_jobs(limit: int = 50) -> list[dict[str, Any]]:
 
 
 def store_upload(job_id: str, *, filename: str, body: bytes) -> str:
-    key = spreadsheet_lab_job_upload_key(job_id, filename)
+    key = spreadsheet_engine_job_upload_key(job_id, filename)
     content_type = (
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         if filename.lower().endswith((".xlsx", ".xlsm"))
@@ -169,7 +174,7 @@ def store_upload(job_id: str, *, filename: str, body: bytes) -> str:
 def load_upload_bytes(job: dict[str, Any]) -> bytes:
     job_id = str(job.get("job_id") or "")
     filename = str(job.get("filename") or "workbook.xlsx")
-    upload_key = str(job.get("upload_key") or spreadsheet_lab_job_upload_key(job_id, filename))
+    upload_key = str(job.get("upload_key") or spreadsheet_engine_job_upload_key(job_id, filename))
     return read_bytes(resolve_blob_location(), upload_key)
 
 
@@ -177,12 +182,12 @@ def load_upload_bytes(job: dict[str, Any]) -> bytes:
 
 
 def save_parse(job_id: str, payload: dict[str, Any]) -> dict[str, Any]:
-    write_json(resolve_blob_location(), spreadsheet_lab_job_parse_key(job_id), payload)
+    write_json(resolve_blob_location(), spreadsheet_engine_job_parse_key(job_id), payload)
     return payload
 
 
 def load_parse(job_id: str) -> dict[str, Any] | None:
-    return read_json(resolve_blob_location(), spreadsheet_lab_job_parse_key(job_id))
+    return read_json(resolve_blob_location(), spreadsheet_engine_job_parse_key(job_id))
 
 
 # ── tables ───────────────────────────────────────────────────────────────────
@@ -220,17 +225,17 @@ def save_table(table: dict[str, Any]) -> dict[str, Any]:
     table_id = str(table.get("table_id") or "").strip()
     if not job_id or not table_id:
         raise ValueError("job_id and table_id are required")
-    write_json(resolve_blob_location(), spreadsheet_lab_job_table_key(job_id, table_id), table)
+    write_json(resolve_blob_location(), spreadsheet_engine_job_table_key(job_id, table_id), table)
     return table
 
 
 def load_table(job_id: str, table_id: str) -> dict[str, Any] | None:
-    return read_json(resolve_blob_location(), spreadsheet_lab_job_table_key(job_id, table_id))
+    return read_json(resolve_blob_location(), spreadsheet_engine_job_table_key(job_id, table_id))
 
 
 def list_table_ids(job_id: str) -> list[str]:
     loc = resolve_blob_location()
-    prefix = spreadsheet_lab_job_tables_prefix(job_id)
+    prefix = spreadsheet_engine_job_tables_prefix(job_id)
     if loc.bucket:
         from hiveflow.storage.blobstore import list_keys
 
@@ -285,4 +290,4 @@ def append_feedback(table: dict[str, Any], *, text: str, by: str = "") -> dict[s
 
 
 def job_prefix_for(job_id: str) -> str:
-    return spreadsheet_lab_job_prefix(job_id)
+    return spreadsheet_engine_job_prefix(job_id)

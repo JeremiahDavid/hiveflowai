@@ -32,16 +32,11 @@ _FILENAMES: dict[str, str] = {
 # Sources with a global docs → client gold merge pipeline today.
 GOLD_BUILD_SOURCES: frozenset[str] = frozenset({"dbc"})
 
-# Virtual sources that appear in Source Browser but are not lake connectors.
-VIRTUAL_REFERENCE_SOURCES: tuple[str, ...] = ("sse",)
-
 
 def normalize_reference_source(source: str) -> str:
     key = source.strip().lower()
     if key == "bc":
         return "dbc"
-    if key in {"spreadsheet", "spreadsheet_engine"}:
-        return "sse"
     return key
 
 
@@ -98,12 +93,11 @@ def list_reference_sources(
         ordered.append(key)
 
     primary = normalize_reference_source(settings.source)
-    _add("sse")
-    if primary and primary != "sse":
+    if primary:
         _add(primary)
     for item in configured or []:
         _add(item)
-    # Prefer known connector order after Spreadsheet Engine and the primary source.
+    # Prefer known connector order after the primary source.
     for item in ("dbc", "qbo", "qbd"):
         if item in seen:
             continue

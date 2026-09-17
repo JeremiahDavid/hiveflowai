@@ -11,9 +11,15 @@ a ``hiveflow_task`` marker; that second, separate invocation does the real
 work with its own full timeout budget. Locally (no ``AWS_LAMBDA_FUNCTION_NAME``)
 the work just runs inline instead.
 
-Spreadsheet Lab is single-tenant (its Lambda's env vars are set once, statically,
-at deploy time — see ``infra/stacks/spreadsheet_lab_stack.py``), so unlike the
-KPI Generator's worker there is no per-event tenant rebinding to do.
+Unlike the KPI Generator's worker (which runs inside the single, always
+already-tenant-scoped multi-tenant portal request), a self-invoked task here
+is a genuinely separate Lambda event with no ambient tenant context of its
+own — the company/bucket the *enqueuing* HTTP request was scoped to
+(``hiveflow.spreadsheet_lab.web.tenant.tenant_scope``) doesn't carry over.
+``_dispatch``/``run_materialize`` capture ``company``/``bucket`` into the
+outgoing payload from whatever is already resolved (job doc / env var) at
+enqueue time; ``run_table_task``/``materialize_lab.lambda_handler`` re-bind to
+that tenant themselves via ``_worker_tenant_scope`` before touching storage.
 """
 
 from __future__ import annotations
@@ -21,8 +27,35 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
+
+
+@contextmanager
+def _worker_tenant_scope(payload: dict[str, Any]) -> Iterator[None]:
+    """Bind a separate (async self-invoke or materialize) Lambda event to the
+    tenant carried in its payload. No-op if the payload carries no tenant
+    (local/dev/test, or a deployment with no multi-tenant config at all)."""
+    company = str(payload.get("company") or "").strip()
+    bucket = str(payload.get("bucket") or "").strip()
+    if not company or not bucket:
+        yield
+        return
+
+    from hiveflow.tenant_credentials import tenant_credentials
+
+    environment = os.environ.get("HIVEFLOW_ENVIRONMENT", "dev").strip() or "dev"
+    previous_bucket = os.environ.get("HIVEFLOW_S3_BUCKET")
+    os.environ["HIVEFLOW_S3_BUCKET"] = bucket
+    try:
+        with tenant_credentials(company, environment):
+            yield
+    finally:
+        if previous_bucket is None:
+            os.environ.pop("HIVEFLOW_S3_BUCKET", None)
+        else:
+            os.environ["HIVEFLOW_S3_BUCKET"] = previous_bucket
 
 TABLE_TASK = "spreadsheet_lab_run_table"
 
@@ -64,11 +97,20 @@ def _dispatch(job_id: str, table_id: str, task: str, **kwargs: Any) -> None:
         table["status"] = "processing"
         store.save_table(table)
 
+    # Carry the tenant this request is already scoped to (see module
+    # docstring) into the async invocation's payload — a self-invoke is a
+    # separate event with no ambient tenant context of its own.
+    job = store.load_job(job_id)
+    company = str((job or {}).get("company") or "")
+    bucket = os.environ.get("HIVEFLOW_S3_BUCKET", "").strip()
+
     payload = {
         "hiveflow_task": TABLE_TASK,
         "job_id": job_id,
         "table_id": table_id,
         "task": task,
+        "company": company,
+        "bucket": bucket,
         **kwargs,
     }
     if _on_lambda():
@@ -117,13 +159,18 @@ def run_materialize(job_id: str, table_id: str) -> dict[str, Any] | None:
     eagerly at module load — so the web/worker Lambda's own zip never needs
     pyarrow installed.
     """
-    function_name = os.environ.get("HIVEFLOW_SPREADSHEET_LAB_MATERIALIZE_FUNCTION", "").strip()
-    if function_name:
-        return _invoke_materialize_lambda(function_name, job_id, table_id)
-
-    from hiveflow.spreadsheet_lab import materialize_lab, store
+    from hiveflow.spreadsheet_lab import store
 
     job = store.load_job(job_id) or {}
+    company = str(job.get("company") or "")
+    bucket = os.environ.get("HIVEFLOW_S3_BUCKET", "").strip()
+
+    function_name = os.environ.get("HIVEFLOW_SPREADSHEET_LAB_MATERIALIZE_FUNCTION", "").strip()
+    if function_name:
+        return _invoke_materialize_lambda(function_name, job_id, table_id, company=company, bucket=bucket)
+
+    from hiveflow.spreadsheet_lab import materialize_lab
+
     table = store.load_table(job_id, table_id) or {}
     upload_body = store.load_upload_bytes(job)
     result = materialize_lab.materialize_approved_table_lab(job=job, table=table, upload_body=upload_body)
@@ -132,11 +179,14 @@ def run_materialize(job_id: str, table_id: str) -> dict[str, Any] | None:
     return materialize_lab.lab_materialization_payload(result, materialized_at=store.now_iso())
 
 
-def _invoke_materialize_lambda(function_name: str, job_id: str, table_id: str) -> dict[str, Any] | None:
-    """Synchronous cross-Lambda call carrying only ``{job_id, table_id}`` — the
-    materialize Lambda re-reads the workbook itself from S3, so the raw
-    workbook bytes never have to cross a Lambda invoke payload (capped at 6MB
-    for synchronous invokes, easily smaller than a real workbook)."""
+def _invoke_materialize_lambda(
+    function_name: str, job_id: str, table_id: str, *, company: str = "", bucket: str = ""
+) -> dict[str, Any] | None:
+    """Synchronous cross-Lambda call carrying ``{job_id, table_id, company,
+    bucket}`` — the materialize Lambda re-reads the job/table/workbook itself
+    from S3 (using the tenant carried here, see ``_worker_tenant_scope``)
+    rather than taking them as payload, since a real workbook can easily
+    exceed the 6MB payload cap for a synchronous invoke."""
     import boto3
 
     region = os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION") or "us-east-2"
@@ -144,7 +194,9 @@ def _invoke_materialize_lambda(function_name: str, job_id: str, table_id: str) -
     response = client.invoke(
         FunctionName=function_name,
         InvocationType="RequestResponse",
-        Payload=json.dumps({"job_id": job_id, "table_id": table_id}).encode("utf-8"),
+        Payload=json.dumps(
+            {"job_id": job_id, "table_id": table_id, "company": company, "bucket": bucket}
+        ).encode("utf-8"),
     )
     body = response["Payload"].read().decode("utf-8")
     if response.get("FunctionError"):
@@ -186,6 +238,11 @@ def _load_sample(job: dict[str, Any], table: dict[str, Any]) -> tuple[list[str],
 
 def run_table_task(payload: dict[str, Any]) -> dict[str, Any]:
     """The actual work — run inline (local/dev) or from the async self-invoke."""
+    with _worker_tenant_scope(payload):
+        return _run_table_task(payload)
+
+
+def _run_table_task(payload: dict[str, Any]) -> dict[str, Any]:
     from hiveflow.spreadsheet_lab import clean_agent, extract_agent, store
 
     job_id = str(payload.get("job_id") or "")

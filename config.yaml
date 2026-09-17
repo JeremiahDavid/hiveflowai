@@ -41,13 +41,11 @@ platform:
               reporting_company: poc2
               reporting_hostname: poc2
               welcome_title: Your operational dashboard
-        spreadsheet_lab:
-          # Standalone sandbox for the Spreadsheet Lab rebuild (see
-          # docs/spreadsheet-lab.md). Basic Auth secret created via:
-          #   aws secretsmanager create-secret --name hiveflow-spreadsheet-lab-dev-basic-auth --secret-string "user:pass"
-          enabled: true
+        spreadsheet_engine:
+          # Subdomain for the Spreadsheet Engine UI (part of
+          # GlobalAgentPipelinesStack — see infra/spreadsheet_engine.py).
+          # Auth is the real portal's session cookie, not a separate secret.
           hostname: spreadsheet-engine
-          basic_auth_secret_arn: 'arn:aws:secretsmanager:us-east-2:749794722426:secret:hiveflow-spreadsheet-lab-dev-basic-auth-E8UVYQ'
         domain:
           zone_name: hive-flow-ai.com
           primary_hostname: hive-flow-ai.com

@@ -5315,3 +5315,170 @@
       min-width: 12rem;
       margin-right: 0.5rem;
     }
+
+/* ── Spreadsheet Engine board (Kanban) ──────────────────────────────────── */
+/* New page-specific classes (se- prefix) — distinct from the read-only
+   .kpi-kanban-* board (KPI Generator) since this page adds a modal and
+   drag-and-drop, neither of which exists elsewhere in the portal yet. */
+
+.se-status-pending {
+  border-color: rgba(var(--amber-rgb), 0.32);
+  color: var(--accent-electric-gold);
+  background: var(--tint-amber);
+}
+
+.se-status-danger {
+  border-color: rgba(var(--danger-rgb), 0.32);
+  color: var(--accent-margin);
+  background: rgba(var(--danger-rgb), 0.1);
+}
+
+.se-status-muted {
+  opacity: 0.7;
+}
+
+.button.danger {
+  border-color: var(--accent-margin);
+  color: var(--accent-margin);
+  background: transparent;
+}
+
+.button.danger:hover {
+  background: rgba(var(--danger-rgb), 0.1);
+}
+
+.form-field textarea {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 4.5rem;
+  padding: 0.6rem 0.75rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-base);
+  color: var(--text);
+  font: inherit;
+  resize: vertical;
+}
+
+.se-board {
+  display: flex;
+  gap: 0.85rem;
+  overflow-x: auto;
+  padding-bottom: 0.5rem;
+  align-items: flex-start;
+}
+
+.se-board-lane {
+  flex: 1 1 0;
+  min-width: 230px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.65rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.se-board-lane.is-drag-over {
+  border-color: var(--accent-mid);
+  background: var(--tint-green);
+}
+
+.se-board-lane-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.4rem;
+  margin-bottom: 0.15rem;
+}
+
+.se-board-lane-head h3 {
+  margin: 0;
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+}
+
+.se-board-lane-approve-all {
+  font-size: 0.68rem;
+  padding: 0.2rem 0.55rem;
+  white-space: nowrap;
+}
+
+.se-board-lane-empty {
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  font-style: italic;
+  padding: 0.5rem 0.1rem;
+}
+
+.se-board-tile {
+  background: var(--bg-base);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.6rem 0.7rem;
+  cursor: pointer;
+  transition: border-color 0.12s ease;
+}
+
+.se-board-tile:hover { border-color: var(--accent-mid); }
+.se-board-tile[draggable="true"] { cursor: grab; }
+.se-board-tile.is-dragging { opacity: 0.4; }
+.se-board-tile.is-discarded { opacity: 0.7; }
+
+.se-board-tile-title { font-weight: 600; font-size: 0.88rem; color: var(--text); }
+.se-board-tile-sub { color: var(--text-muted); font-size: 0.76rem; margin-top: 0.15rem; }
+.se-board-tile-badge { display: inline-block; margin-top: 0.4rem; }
+
+.se-modal-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 50;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 5vh 1rem;
+  overflow-y: auto;
+}
+
+.se-modal-backdrop.is-open { display: flex; }
+
+.se-modal-panel {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  max-width: 42rem;
+  width: 100%;
+  padding: 1.5rem;
+  position: relative;
+  margin-bottom: 5vh;
+  box-shadow: none;
+}
+
+.se-modal-close {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.85rem;
+  border: none;
+  background: none;
+  font-size: 1.4rem;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--text-muted);
+  padding: 0.25rem 0.5rem;
+}
+
+.se-modal-close:hover { color: var(--text); }
+.se-modal-panel h2 { margin: 0 0 0.25rem; font-size: 1.05rem; }
+
+.se-feedback-entry {
+  border-left: 2px solid var(--border-strong);
+  padding-left: 0.5rem;
+  margin-bottom: 0.4rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}

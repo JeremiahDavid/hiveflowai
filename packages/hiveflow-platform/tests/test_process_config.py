@@ -30,6 +30,7 @@ def test_process_config_loads_all_deployed_processes() -> None:
         "prepare",
         "qbd_ingest",
         "refresh",
+        "spreadsheet_engine",
         "ui_serve",
     ]
 

@@ -142,9 +142,11 @@ def test_source_docs_inspector_empty_shows_build(tmp_path: Path, portal_env: Non
     response = client.get("/portal/semantics/source-docs")
     assert response.status_code == 200
     assert b"Source Browser" in response.data
-    assert b"Spreadsheet Engine" in response.data
     assert b"source-docs-source-nav" in response.data
-    assert b"Drop an Excel workbook" in response.data
+    # No source given defaults to the primary configured connector (dbc) —
+    # the Spreadsheet Engine is no longer a virtual source living inside this
+    # inspector, it's its own portal-authenticated app (see dna_nav.py).
+    assert b"Business Central" in response.data
 
     response_dbc = client.get("/portal/semantics/source-docs/dbc")
     assert response_dbc.status_code == 200

@@ -16,7 +16,7 @@ from typing import Any
 from hiveflow.spreadsheet.transform import compute_input_shape
 from hiveflow.spreadsheet_lab import store
 from hiveflow.storage.blobstore import read_json, resolve_blob_location, write_json
-from hiveflow.storage.paths import spreadsheet_lab_file_recipe_key
+from hiveflow.storage.paths import spreadsheet_engine_file_recipe_key
 
 RECIPE_KIND = "spreadsheet_lab_file_recipe"
 TERMINAL_STATUSES = frozenset({"approved", "discarded"})
@@ -36,7 +36,7 @@ def compute_file_shape_hash(parse_payload: dict[str, Any]) -> str:
 def find_matching_file_recipe(file_shape_hash: str) -> dict[str, Any] | None:
     if not file_shape_hash:
         return None
-    return read_json(resolve_blob_location(), spreadsheet_lab_file_recipe_key(file_shape_hash))
+    return read_json(resolve_blob_location(), spreadsheet_engine_file_recipe_key(file_shape_hash))
 
 
 def all_tables_terminal(job_id: str) -> bool:
@@ -80,7 +80,7 @@ def compile_file_recipe(job_id: str) -> dict[str, Any]:
             for table in tables
         ],
     }
-    write_json(resolve_blob_location(), spreadsheet_lab_file_recipe_key(file_shape_hash), recipe)
+    write_json(resolve_blob_location(), spreadsheet_engine_file_recipe_key(file_shape_hash), recipe)
     return recipe
 
 
