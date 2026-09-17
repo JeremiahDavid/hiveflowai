@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from aws_cdk import CfnOutput, Duration, Stack, Tags
+from aws_cdk import ArnFormat, CfnOutput, Duration, Stack, Tags
 from aws_cdk import aws_apigateway as apigateway
 from aws_cdk import aws_iam as iam
 from aws_cdk import aws_lambda as _lambda
@@ -48,12 +48,24 @@ class SpreadsheetLabStack(Stack):
 
         data_bucket = s3.Bucket.from_bucket_name(self, "PocDataBucket", data_bucket_name)
 
+        # Separate Lambda for the parquet write (see _create_materialize_lambda):
+        # pyarrow can't ship alongside pandas/pydantic/python-calamine (needed by
+        # the web/worker Lambda below) without blowing past Lambda's 250MB
+        # unzipped limit — confirmed by a real deploy failure, not a hypothetical.
+        materialize_runtime = hiveflow_lambda_runtime(self, profile="spreadsheet_lab_materialize")
+        materialize_fn = self._create_materialize_lambda(
+            lambda_runtime=materialize_runtime,
+            environment=env,
+            data_bucket=data_bucket,
+        )
+
         lambda_runtime = hiveflow_lambda_runtime(self, profile="spreadsheet_lab")
         ui_fn = self._create_lab_lambda(
             lambda_runtime=lambda_runtime,
             environment=env,
             data_bucket=data_bucket,
             lab_config=lab_config,
+            materialize_fn=materialize_fn,
         )
 
         self.web_api = apigateway.RestApi(
@@ -92,8 +104,23 @@ class SpreadsheetLabStack(Stack):
                 zone_name=zone_name,
                 admin_hostname=hostname,
             )
+            # attach_admin_subdomain's BasePathMapping targets the API by a
+            # plain rest_api_id STRING — correct for its normal caller
+            # (GlobalDnsStack, which always runs as a later, separate deploy
+            # against an already-existing API from a prior stack), but here
+            # it's created in the SAME stack/deploy as self.web_api, so
+            # CloudFormation has no implicit ordering against the API's own
+            # Deployment/Stage. Without this, CloudFormation can try to create
+            # the mapping before the stage exists ("Invalid stage identifier
+            # specified" — confirmed by a real deploy failure, not a
+            # hypothetical). Force the ordering explicitly rather than
+            # touching the shared ui_domain.py helper.
+            for child in self.node.find_all():
+                if isinstance(child, apigateway.CfnBasePathMapping):
+                    child.add_dependency(self.web_api.deployment_stage.node.default_child)
 
         CfnOutput(self, "SpreadsheetLabFunctionName", value=ui_fn.function_name)
+        CfnOutput(self, "SpreadsheetLabMaterializeFunctionName", value=materialize_fn.function_name)
         CfnOutput(self, "SpreadsheetLabSiteUrl", value=f"https://{full_hostname}/")
         CfnOutput(self, "ApiGatewayUrl", value=self.web_api.url)
         CfnOutput(
@@ -116,6 +143,39 @@ class SpreadsheetLabStack(Stack):
             Tags.of(self).add(key, value)
         Tags.of(self).add("hiveflow:component", "spreadsheet-lab")
 
+    def _create_materialize_lambda(
+        self,
+        *,
+        lambda_runtime: Any,
+        environment: str,
+        data_bucket: s3.IBucket,
+    ) -> _lambda.Function:
+        """The only Spreadsheet Lab Lambda that needs pyarrow installed — writes
+        the approved, cleaned table to silver/reference_lab/. Invoked
+        synchronously by the web/worker Lambda with only {job_id, table_id}
+        (see worker.run_materialize / materialize_lab.lambda_handler); it has
+        no HTTP surface of its own and never calls Bedrock."""
+        materialize_fn = _lambda.Function(
+            self,
+            "SpreadsheetLabMaterializeFunction",
+            function_name=f"spreadsheet-lab-{environment}-materialize",
+            runtime=_lambda.Runtime.PYTHON_3_12,
+            handler="hiveflow.spreadsheet_lab.materialize_lab.lambda_handler",
+            timeout=Duration.minutes(2),
+            memory_size=1024,
+            description=f"Spreadsheet Lab materialize-only worker for {environment}",
+            code=lambda_runtime.code,
+            layers=lambda_runtime.layers,
+            environment={
+                "HIVEFLOW_S3_BUCKET": data_bucket.bucket_name,
+                "HIVEFLOW_COMPANY": "poc",
+                "HIVEFLOW_ENVIRONMENT": environment,
+            },
+        )
+        data_bucket.grant_read_write(materialize_fn, "governance/spreadsheet_lab/*")
+        data_bucket.grant_read_write(materialize_fn, "silver/reference_lab/*")
+        return materialize_fn
+
     def _create_lab_lambda(
         self,
         *,
@@ -123,21 +183,24 @@ class SpreadsheetLabStack(Stack):
         environment: str,
         data_bucket: s3.IBucket,
         lab_config: dict[str, Any],
+        materialize_fn: _lambda.Function,
     ) -> _lambda.Function:
         environment_vars = {
             "HIVEFLOW_S3_BUCKET": data_bucket.bucket_name,
             "HIVEFLOW_COMPANY": "poc",
             "HIVEFLOW_ENVIRONMENT": environment,
             "HIVEFLOW_BEDROCK_MODEL_ID": "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+            "HIVEFLOW_SPREADSHEET_LAB_MATERIALIZE_FUNCTION": materialize_fn.function_name,
         }
         auth_secret_arn = str(lab_config.get("basic_auth_secret_arn", "")).strip()
         if auth_secret_arn:
             environment_vars["HIVEFLOW_SPREADSHEET_LAB_AUTH_SECRET_ARN"] = auth_secret_arn
 
+        function_name = f"spreadsheet-lab-{environment}-serve"
         ui_fn = _lambda.Function(
             self,
             "SpreadsheetLabFunction",
-            function_name=f"spreadsheet-lab-{environment}-serve",
+            function_name=function_name,
             runtime=_lambda.Runtime.PYTHON_3_12,
             handler="hiveflow.spreadsheet_lab.web.lambda_handler.handler",
             # Room for the async self-invoke table-task path (see worker.py) —
@@ -168,10 +231,33 @@ class SpreadsheetLabStack(Stack):
         grant_bedrock_semantic_access(ui_fn)
 
         # Self-invoke for the async table-task worker path (worker._invoke_self_async).
+        # Built from the literal function_name (format_arn is pure string
+        # construction from account/region), NOT ui_fn.function_arn — that
+        # attribute is a CloudFormation GetAtt reference, and attaching a
+        # policy that references a function's own ARN to that SAME function's
+        # role creates a genuine circular dependency (Function -> Role ->
+        # Policy -> Function) that CloudFormation refuses to deploy.
+        self_invoke_arn = Stack.of(self).format_arn(
+            service="lambda",
+            resource="function",
+            resource_name=function_name,
+            # Lambda ARNs are colon-separated (arn:...:function:name), unlike
+            # the slash-separated default format_arn() otherwise assumes —
+            # confirmed by a real AccessDeniedException where the deployed
+            # policy resource was .../function/spreadsheet-lab-dev-serve (no
+            # match) instead of .../function:spreadsheet-lab-dev-serve.
+            arn_format=ArnFormat.COLON_RESOURCE_NAME,
+        )
         ui_fn.add_to_role_policy(
             iam.PolicyStatement(
                 actions=["lambda:InvokeFunction"],
-                resources=[ui_fn.function_arn],
+                resources=[self_invoke_arn],
             )
         )
+
+        # Synchronous cross-Lambda call for the parquet write (worker.run_materialize).
+        # This is a one-directional reference to a DIFFERENT function's ARN —
+        # no risk of the self-invoke cycle above, since materialize_fn's own
+        # role never references ui_fn back.
+        materialize_fn.grant_invoke(ui_fn)
         return ui_fn

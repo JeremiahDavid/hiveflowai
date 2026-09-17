@@ -22,6 +22,7 @@ real reference entities.
 from __future__ import annotations
 
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -37,7 +38,76 @@ from hiveflow.storage.paths import (
     spreadsheet_lab_reference_silver_entity_parquet_key,
 )
 
-__all__ = ["materialize_approved_table_lab", "materialization_payload"]
+__all__ = [
+    "materialize_approved_table_lab",
+    "materialization_payload",
+    "lab_materialization_payload",
+    "lambda_handler",
+]
+
+PREVIEW_ROW_LIMIT = 20
+
+
+@dataclass
+class LabMaterialization:
+    """Wraps the shared ``SilverMaterialization`` with a small row preview so
+    an operator can confirm the materialized output in the review UI without
+    needing pyarrow (or S3/Athena access) in the web Lambda — see
+    ``lab_materialization_payload``."""
+
+    result: SilverMaterialization
+    preview_headers: list[str]
+    preview_rows: list[list[Any]]
+
+
+def lab_materialization_payload(lab_result: LabMaterialization, *, materialized_at: str) -> dict[str, Any]:
+    payload = materialization_payload(lab_result.result, materialized_at=materialized_at)
+    payload["silver_preview_headers"] = lab_result.preview_headers
+    payload["silver_preview_rows"] = lab_result.preview_rows
+    return payload
+
+
+def _coerce_uniform_column_types(
+    rows: list[dict[str, Any]], *, issues: list[str]
+) -> list[dict[str, Any]]:
+    """Stringify any column whose values span more than one Python type.
+
+    pyarrow's ``Table.from_pylist`` hard-crashes (``ArrowTypeError``) on a
+    column mixing e.g. ``str`` and ``int`` — confirmed by a real approved
+    table whose synthesized transform left a "value" column with 9 text
+    rows and one raw numeric cell (no ``cast`` step ever ran over it, since
+    the transform never explicitly typed that column). An operator's
+    approval should never be lost to that: a table this messy is exactly
+    the kind of raw, uncleaned spreadsheet data this tool exists to handle,
+    so widen the column to text rather than crashing. Not fixed upstream in
+    ``hiveflow.storage.parquet`` (shared by every connector's ingest writes)
+    — that blast radius is out of scope for a Spreadsheet Lab data-quality
+    guard.
+    """
+    if not rows:
+        return rows
+    columns: dict[str, set[type]] = {}
+    for row in rows:
+        for key, value in row.items():
+            if value is None:
+                continue
+            columns.setdefault(key, set()).add(type(value))
+    mixed_columns = {key for key, types in columns.items() if len(types) > 1}
+    if not mixed_columns:
+        return rows
+    issues.append(
+        "Column(s) "
+        + ", ".join(sorted(mixed_columns))
+        + " had mixed data types in the raw sheet; converted to text so the row wasn't dropped."
+    )
+    coerced: list[dict[str, Any]] = []
+    for row in rows:
+        new_row = dict(row)
+        for key in mixed_columns:
+            if key in new_row and new_row[key] is not None:
+                new_row[key] = str(new_row[key])
+        coerced.append(new_row)
+    return coerced
 
 
 def _write_reference_silver_parquet(
@@ -48,7 +118,8 @@ def _write_reference_silver_parquet(
 ) -> SilverMaterialization:
     entity = _normalize_entity_name(entity_name)
     parquet_key = spreadsheet_lab_reference_silver_entity_parquet_key(entity)
-    normalized_rows = normalize_silver_rows(rows)
+    issues = issues if issues is not None else []
+    normalized_rows = _coerce_uniform_column_types(normalize_silver_rows(rows), issues=issues)
     loc = resolve_blob_location()
     if loc.bucket:
 
@@ -76,7 +147,7 @@ def materialize_approved_table_lab(
     job: dict[str, Any],
     table: dict[str, Any],
     upload_body: bytes,
-) -> SilverMaterialization | None:
+) -> LabMaterialization | None:
     """Extract every workbook row for the table's approved region, apply its
     approved transformation, and write silver/reference_lab/{entity} parquet."""
     region = table.get("source_region") or {}
@@ -111,6 +182,35 @@ def materialize_approved_table_lab(
         return None
 
     entity_name = str(table.get("entity_name") or table.get("table_id") or "")
-    return _write_reference_silver_parquet(
+    result = _write_reference_silver_parquet(
         entity_name, _rows_to_dicts(out_headers, out_rows), issues=issues
     )
+    return LabMaterialization(
+        result=result,
+        preview_headers=list(out_headers),
+        preview_rows=[list(row) for row in out_rows[:PREVIEW_ROW_LIMIT]],
+    )
+
+
+def lambda_handler(event: dict[str, Any] | None, _context: Any) -> dict[str, Any]:
+    """Entry point for the dedicated materialize Lambda (see worker.run_materialize).
+
+    Takes only ``{job_id, table_id}`` — re-reads the job/table/workbook itself
+    from S3 rather than taking them as payload, since this Lambda is invoked
+    synchronously and a real workbook can easily exceed the 6MB payload cap.
+    This is the only Lambda in Spreadsheet Lab that needs pyarrow installed.
+    """
+    from hiveflow.spreadsheet_lab import store
+
+    payload = event or {}
+    job_id = str(payload.get("job_id") or "")
+    table_id = str(payload.get("table_id") or "")
+    job = store.load_job(job_id)
+    table = store.load_table(job_id, table_id)
+    if not job or not table:
+        raise ValueError(f"Unknown job/table {job_id!r}/{table_id!r}")
+
+    upload_body = store.load_upload_bytes(job)
+    result = materialize_approved_table_lab(job=job, table=table, upload_body=upload_body)
+    silver = lab_materialization_payload(result, materialized_at=store.now_iso()) if result else None
+    return {"silver": silver}

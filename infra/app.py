@@ -163,7 +163,7 @@ if cdk_scope in ("all", "ingest"):
                 description=f"HiveFlow DNA semantic engine for {company}/{environment}",
             )
 
-if cdk_scope in ("all", "platform") and platform_enabled:
+if cdk_scope in ("all", "platform", "spreadsheet_lab") and platform_enabled:
     global_ui_module = importlib.import_module(f"stacks.{global_ui_stack_module_name()}")
     global_dns_module = importlib.import_module(f"stacks.{global_dns_stack_module_name()}")
     global_dna_module = importlib.import_module(f"stacks.{global_dna_stack_module_name()}")
@@ -202,27 +202,38 @@ if cdk_scope in ("all", "platform") and platform_enabled:
             region=region,
         )
 
-        global_dna_module.GlobalDnaStack(
-            app,
-            global_dna_stack_name(environment),
-            environment=environment,
-            env=cdk.Environment(
-                account=account,
-                region=region,
-            ),
-            description=f"Global DNA jobs (source documentation) for {environment}",
-        )
+        # Skipped under `-c scope=spreadsheet_lab`: GlobalAgentPipelinesStack in
+        # particular bundles container-image Lambdas (Docker + Node + the
+        # claude CLI, per docs/spreadsheet-engine.md), which dominates CDK
+        # synth time even when only SpreadsheetLabStack is actually being
+        # deployed — confirmed by real deploys where synthesis alone grew to
+        # 30+ minutes bundling every sibling platform stack's Lambda assets.
+        # The whole point of Spreadsheet Lab's own stack was to iterate fast
+        # and independently of the rest of the platform (see
+        # infra/stacks/spreadsheet_lab_stack.py's module docstring) — this
+        # scope value is what actually delivers that at the CLI level.
+        if cdk_scope != "spreadsheet_lab":
+            global_dna_module.GlobalDnaStack(
+                app,
+                global_dna_stack_name(environment),
+                environment=environment,
+                env=cdk.Environment(
+                    account=account,
+                    region=region,
+                ),
+                description=f"Global DNA jobs (source documentation) for {environment}",
+            )
 
-        global_agent_pipelines_module.GlobalAgentPipelinesStack(
-            app,
-            global_agent_pipelines_stack_name(environment),
-            environment=environment,
-            env=cdk.Environment(
-                account=account,
-                region=region,
-            ),
-            description=f"Shared multi-tenant AI-agent pipelines (Spreadsheet Engine) for {environment}",
-        )
+            global_agent_pipelines_module.GlobalAgentPipelinesStack(
+                app,
+                global_agent_pipelines_stack_name(environment),
+                environment=environment,
+                env=cdk.Environment(
+                    account=account,
+                    region=region,
+                ),
+                description=f"Shared multi-tenant AI-agent pipelines (Spreadsheet Engine) for {environment}",
+            )
 
         # Standalone sandbox for the Spreadsheet Lab rebuild — deliberately not
         # gated on is_platform_ui_enabled/global_ui_stack: it deploys and tears
@@ -250,185 +261,186 @@ if cdk_scope in ("all", "platform") and platform_enabled:
                 description=f"Spreadsheet Lab sandbox for {environment}",
             )
 
-        global_ui_stack = None
-        if is_platform_ui_enabled(platform_env_config):
-            global_ui_stack = global_ui_module.GlobalUiStack(
-                app,
-                global_ui_stack_name(environment),
-                environment=environment,
-                ui_config=ui_config,
-                client_buckets=client_buckets,
-                env=cdk.Environment(
-                    account=account,
-                    region=region,
-                ),
-                description=f"Global HiveFlowAI UI for {environment}",
-            )
-
-        platform_admin_stack = None
-        if is_platform_ui_enabled(platform_env_config):
-            platform_admin_stack = platform_admin_module.PlatformAdminStack(
-                app,
-                platform_admin_stack_name(environment),
-                environment=environment,
-                ui_config=ui_config,
-                env=cdk.Environment(
-                    account=account,
-                    region=region,
-                ),
-                description=f"Platform admin UI for {environment}",
-            )
-
-            provisioning_module.ProvisioningStack(
-                app,
-                provisioning_stack_name(environment),
-                environment=environment,
-                config_bucket=platform_admin_stack.config_bucket,
-                env=cdk.Environment(
-                    account=account,
-                    region=region,
-                ),
-                description=f"Client onboarding CodeBuild provisioner for {environment}",
-            )
-
-        portal_stack = None
-        if global_ui_stack is not None:
-            portal_stack = portal_module.PortalStack(
-                app,
-                portal_stack_name(environment),
-                environment=environment,
-                ui_config=ui_config,
-                portal_user_pool=global_ui_stack.portal_user_pool,
-                portal_user_pool_client=global_ui_stack.portal_user_pool_client,
-                portal_session_secret=global_ui_stack.portal_session_secret,
-                domain_config=ui_config.get("domain", {}) if isinstance(ui_config.get("domain"), dict) else {},
-                env=cdk.Environment(
-                    account=account,
-                    region=region,
-                ),
-                description=f"Multi-tenant client reporting portal for {environment}",
-            )
-
-        reporting_stacks: list[tuple[str, dict, Any]] = []
-        for client_id, reporting_company, client_cfg in (
-            iter_portal_reporting_clients(platform_env_config) if legacy_reporting else []
-        ):
-            if filter_company_key and reporting_company.strip().lower() != filter_company_key:
-                continue
-
-            company_env_config = None
-            try:
-                from hiveflow.project_config import get_environment_config
-
-                company_env_config = get_environment_config(reporting_company, environment)
-            except KeyError:
-                continue
-
-            if not is_dna_stack_enabled(company_env_config):
-                continue
-
-            if global_ui_stack is None:
-                continue
-
-            reporting_bucket = resolve_data_bucket_name(
-                reporting_company,
-                environment,
-                account=account,
-                region=region,
-            )
-            reporting_stack = reporting_module.ReportingStack(
-                app,
-                reporting_stack_name(client_id, environment),
-                client_id=client_id,
-                company=reporting_company,
-                environment=environment,
-                data_bucket_name=reporting_bucket,
-                source=resolve_dna_source(company_env_config),
-                client_config=client_cfg,
-                dna_config=get_dna_config(company_env_config),
-                portal_user_pool=global_ui_stack.portal_user_pool,
-                portal_user_pool_client=global_ui_stack.portal_user_pool_client,
-                portal_session_secret=global_ui_stack.portal_session_secret,
-                domain_config=ui_config.get("domain", {}) if isinstance(ui_config.get("domain"), dict) else {},
-                env=cdk.Environment(
-                    account=account,
-                    region=region,
-                ),
-                description=(
-                    f"Portal reporting UI for client {client_id} "
-                    f"({reporting_company}/{environment})"
-                ),
-            )
-            reporting_stacks.append((client_id, client_cfg, reporting_stack))
-
-        if dns_stack_enabled:
-            from stacks.global_dns_stack import AdminDnsTarget, ReportingDnsTarget
-
-            domain_cfg = ui_config.get("domain", {}) if isinstance(ui_config.get("domain"), dict) else {}
-            admin_hostname = str(domain_cfg.get("admin_hostname", "admin")).strip().lower() or "admin"
-            admin_dns_target = None
-            if platform_admin_stack is not None:
-                admin_dns_target = AdminDnsTarget(
-                    rest_api_id=_resolve_web_api_id(
-                        context_key="adminWebApiId",
-                        export_name=platform_admin_web_api_export_name(environment),
+        if cdk_scope != "spreadsheet_lab":
+            global_ui_stack = None
+            if is_platform_ui_enabled(platform_env_config):
+                global_ui_stack = global_ui_module.GlobalUiStack(
+                    app,
+                    global_ui_stack_name(environment),
+                    environment=environment,
+                    ui_config=ui_config,
+                    client_buckets=client_buckets,
+                    env=cdk.Environment(
+                        account=account,
+                        region=region,
                     ),
-                    admin_hostname=admin_hostname,
+                    description=f"Global HiveFlowAI UI for {environment}",
                 )
 
-            # Per-client reporting subdomains are legacy — `*.{zone}` now routes
-            # every client to PortalStack. Kept only during the cut-over window.
-            dns_reporting_targets: list[ReportingDnsTarget] = []
-            if legacy_reporting:
-                for dns_client_id, reporting_company, client_cfg in iter_portal_reporting_clients(
-                    platform_env_config
-                ):
-                    try:
-                        from hiveflow.project_config import get_environment_config
+            platform_admin_stack = None
+            if is_platform_ui_enabled(platform_env_config):
+                platform_admin_stack = platform_admin_module.PlatformAdminStack(
+                    app,
+                    platform_admin_stack_name(environment),
+                    environment=environment,
+                    ui_config=ui_config,
+                    env=cdk.Environment(
+                        account=account,
+                        region=region,
+                    ),
+                    description=f"Platform admin UI for {environment}",
+                )
 
-                        company_env_config = get_environment_config(reporting_company, environment)
-                    except KeyError:
-                        continue
-                    if not is_dna_stack_enabled(company_env_config):
-                        continue
-                    dns_reporting_targets.append(
-                        ReportingDnsTarget(
-                            rest_api_id=_resolve_web_api_id(
-                                context_key=_reporting_web_api_context_key(dns_client_id),
-                                export_name=reporting_web_api_export_name(dns_client_id, environment),
-                            ),
-                            client_id=dns_client_id,
-                            reporting_hostname=str(
-                                client_cfg.get("reporting_hostname", dns_client_id)
-                            ).strip().lower(),
-                        )
+                provisioning_module.ProvisioningStack(
+                    app,
+                    provisioning_stack_name(environment),
+                    environment=environment,
+                    config_bucket=platform_admin_stack.config_bucket,
+                    env=cdk.Environment(
+                        account=account,
+                        region=region,
+                    ),
+                    description=f"Client onboarding CodeBuild provisioner for {environment}",
+                )
+
+            portal_stack = None
+            if global_ui_stack is not None:
+                portal_stack = portal_module.PortalStack(
+                    app,
+                    portal_stack_name(environment),
+                    environment=environment,
+                    ui_config=ui_config,
+                    portal_user_pool=global_ui_stack.portal_user_pool,
+                    portal_user_pool_client=global_ui_stack.portal_user_pool_client,
+                    portal_session_secret=global_ui_stack.portal_session_secret,
+                    domain_config=ui_config.get("domain", {}) if isinstance(ui_config.get("domain"), dict) else {},
+                    env=cdk.Environment(
+                        account=account,
+                        region=region,
+                    ),
+                    description=f"Multi-tenant client reporting portal for {environment}",
+                )
+
+            reporting_stacks: list[tuple[str, dict, Any]] = []
+            for client_id, reporting_company, client_cfg in (
+                iter_portal_reporting_clients(platform_env_config) if legacy_reporting else []
+            ):
+                if filter_company_key and reporting_company.strip().lower() != filter_company_key:
+                    continue
+
+                company_env_config = None
+                try:
+                    from hiveflow.project_config import get_environment_config
+
+                    company_env_config = get_environment_config(reporting_company, environment)
+                except KeyError:
+                    continue
+
+                if not is_dna_stack_enabled(company_env_config):
+                    continue
+
+                if global_ui_stack is None:
+                    continue
+
+                reporting_bucket = resolve_data_bucket_name(
+                    reporting_company,
+                    environment,
+                    account=account,
+                    region=region,
+                )
+                reporting_stack = reporting_module.ReportingStack(
+                    app,
+                    reporting_stack_name(client_id, environment),
+                    client_id=client_id,
+                    company=reporting_company,
+                    environment=environment,
+                    data_bucket_name=reporting_bucket,
+                    source=resolve_dna_source(company_env_config),
+                    client_config=client_cfg,
+                    dna_config=get_dna_config(company_env_config),
+                    portal_user_pool=global_ui_stack.portal_user_pool,
+                    portal_user_pool_client=global_ui_stack.portal_user_pool_client,
+                    portal_session_secret=global_ui_stack.portal_session_secret,
+                    domain_config=ui_config.get("domain", {}) if isinstance(ui_config.get("domain"), dict) else {},
+                    env=cdk.Environment(
+                        account=account,
+                        region=region,
+                    ),
+                    description=(
+                        f"Portal reporting UI for client {client_id} "
+                        f"({reporting_company}/{environment})"
+                    ),
+                )
+                reporting_stacks.append((client_id, client_cfg, reporting_stack))
+
+            if dns_stack_enabled:
+                from stacks.global_dns_stack import AdminDnsTarget, ReportingDnsTarget
+
+                domain_cfg = ui_config.get("domain", {}) if isinstance(ui_config.get("domain"), dict) else {}
+                admin_hostname = str(domain_cfg.get("admin_hostname", "admin")).strip().lower() or "admin"
+                admin_dns_target = None
+                if platform_admin_stack is not None:
+                    admin_dns_target = AdminDnsTarget(
+                        rest_api_id=_resolve_web_api_id(
+                            context_key="adminWebApiId",
+                            export_name=platform_admin_web_api_export_name(environment),
+                        ),
+                        admin_hostname=admin_hostname,
                     )
 
-            wildcard_portal_api_id = None
-            if portal_stack is not None:
-                wildcard_portal_api_id = _resolve_web_api_id(
-                    context_key="portalWebApiId",
-                    export_name=portal_web_api_export_name(environment),
-                )
+                # Per-client reporting subdomains are legacy — `*.{zone}` now routes
+                # every client to PortalStack. Kept only during the cut-over window.
+                dns_reporting_targets: list[ReportingDnsTarget] = []
+                if legacy_reporting:
+                    for dns_client_id, reporting_company, client_cfg in iter_portal_reporting_clients(
+                        platform_env_config
+                    ):
+                        try:
+                            from hiveflow.project_config import get_environment_config
 
-            global_dns_module.GlobalDnsStack(
-                app,
-                global_dns_stack_name(environment),
-                environment=environment,
-                ui_config=ui_config,
-                global_rest_api_id=_resolve_web_api_id(
-                    context_key="globalWebApiId",
-                    export_name=global_ui_web_api_export_name(environment),
-                ),
-                reporting_targets=dns_reporting_targets,
-                wildcard_portal_api_id=wildcard_portal_api_id,
-                admin_target=admin_dns_target,
-                manage_base_path_mappings=_dns_manage_base_path_mappings(),
-                env=cdk.Environment(
-                    account=account,
-                    region=region,
-                ),
-                description=f"HiveFlowAI public DNS for {environment}",
-            )
+                            company_env_config = get_environment_config(reporting_company, environment)
+                        except KeyError:
+                            continue
+                        if not is_dna_stack_enabled(company_env_config):
+                            continue
+                        dns_reporting_targets.append(
+                            ReportingDnsTarget(
+                                rest_api_id=_resolve_web_api_id(
+                                    context_key=_reporting_web_api_context_key(dns_client_id),
+                                    export_name=reporting_web_api_export_name(dns_client_id, environment),
+                                ),
+                                client_id=dns_client_id,
+                                reporting_hostname=str(
+                                    client_cfg.get("reporting_hostname", dns_client_id)
+                                ).strip().lower(),
+                            )
+                        )
+
+                wildcard_portal_api_id = None
+                if portal_stack is not None:
+                    wildcard_portal_api_id = _resolve_web_api_id(
+                        context_key="portalWebApiId",
+                        export_name=portal_web_api_export_name(environment),
+                    )
+
+                global_dns_module.GlobalDnsStack(
+                    app,
+                    global_dns_stack_name(environment),
+                    environment=environment,
+                    ui_config=ui_config,
+                    global_rest_api_id=_resolve_web_api_id(
+                        context_key="globalWebApiId",
+                        export_name=global_ui_web_api_export_name(environment),
+                    ),
+                    reporting_targets=dns_reporting_targets,
+                    wildcard_portal_api_id=wildcard_portal_api_id,
+                    admin_target=admin_dns_target,
+                    manage_base_path_mappings=_dns_manage_base_path_mappings(),
+                    env=cdk.Environment(
+                        account=account,
+                        region=region,
+                    ),
+                    description=f"HiveFlowAI public DNS for {environment}",
+                )
 
 app.synth()

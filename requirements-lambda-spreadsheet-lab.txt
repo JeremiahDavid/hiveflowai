@@ -5,13 +5,18 @@
 # no lxml/cryptography/httpx/intuit-oauth (BC/QBO connector auth, unrelated
 # here). List only what the app and the reused hiveflow.spreadsheet/_agent_runtime
 # + hiveflow_spreadsheet_parser modules actually import, at runtime, transitively.
+#
+# Deliberately NO pyarrow here — bundled alongside pandas/pydantic/python-calamine
+# it blows past Lambda's 250MB unzipped limit (confirmed by a real deploy
+# failure). The parquet write (the only thing that needs pyarrow) runs in a
+# separate, dedicated Lambda instead — see requirements-lambda-spreadsheet-lab-
+# materialize.txt and hiveflow.spreadsheet_lab.worker.run_materialize.
 
 boto3>=1.35.0
 botocore>=1.35.0
 pyyaml>=6.0.0
 typing_extensions>=4.12.0
 openpyxl>=3.1.5
-pyarrow>=18.0.0
 
 # Web app.
 fastapi>=0.115.0

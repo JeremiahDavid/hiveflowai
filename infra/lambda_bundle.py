@@ -21,7 +21,9 @@ UI_BUNDLE_REVISION = "20260818-spreadsheet-openpyxl"
 # Bump when DNA/ingest code Lambda must redeploy even if CDK asset cache is stale.
 DNA_BUNDLE_REVISION = "20260819-spreadsheet-induction-fallback"
 
-LambdaDepsProfile = Literal["full", "ui", "reporting", "parser", "spreadsheet_lab"]
+LambdaDepsProfile = Literal[
+    "full", "ui", "reporting", "parser", "spreadsheet_lab", "spreadsheet_lab_materialize"
+]
 
 _PROFILE_REQUIREMENTS: dict[LambdaDepsProfile, str] = {
     "full": "requirements.txt",
@@ -29,6 +31,12 @@ _PROFILE_REQUIREMENTS: dict[LambdaDepsProfile, str] = {
     "reporting": "requirements-lambda-reporting.txt",
     "parser": "requirements-lambda-parser.txt",
     "spreadsheet_lab": "requirements-lambda-spreadsheet-lab.txt",
+    # Separate from "spreadsheet_lab" deliberately: pyarrow (needed only here,
+    # for the parquet write) can't ship alongside pandas/pydantic/python-calamine
+    # (needed only by the web/worker Lambda, for table extraction/cleaning)
+    # without blowing past Lambda's 250MB unzipped limit — confirmed by a real
+    # deploy failure on SpreadsheetLabStack-dev, not a hypothetical.
+    "spreadsheet_lab_materialize": "requirements-lambda-spreadsheet-lab-materialize.txt",
 }
 
 PACKAGE_HIVEFLOW_ROOTS: tuple[Path, ...] = (
@@ -134,29 +142,46 @@ def _requirements_path(profile: LambdaDepsProfile) -> Path:
     return PROJECT_ROOT / _PROFILE_REQUIREMENTS[profile]
 
 
+def _normalized_text_bytes(path: Path) -> bytes:
+    """Read a text file with line endings normalized to ``\\n`` before hashing.
+
+    A Windows checkout with ``core.autocrlf=true`` (this repo's setting) can
+    silently flip a tracked text file's line endings on nothing more than a
+    ``git stash``/checkout — hashing raw bytes then busts every cache keyed
+    off that hash (both this and the dependency-install cache below) for a
+    file whose content never actually changed, forcing an expensive full
+    ``pip install`` of large wheels like pandas/pyarrow on the next deploy.
+    Confirmed as the dominant cost behind repeated ~20-30 minute Spreadsheet
+    Lab deploys this session: three different dependency-cache-key hashes
+    were found on disk for what was, LF-normalized, the exact same
+    requirements file content.
+    """
+    return path.read_bytes().replace(b"\r\n", b"\n")
+
+
 def _hash_hiveflow_sources(digest: "hashlib._Hash", extra_roots: tuple[Path, ...] = ()) -> None:
     for label, path in iter_hiveflow_source_files():
         digest.update(label.encode("utf-8"))
-        digest.update(path.read_bytes())
+        digest.update(_normalized_text_bytes(path))
     for root in extra_roots:
         if not root.is_dir():
             continue
         for path in sorted(root.rglob("*")):
             if path.is_file():
                 digest.update(f"{root.name}:{path.relative_to(root).as_posix()}".encode("utf-8"))
-                digest.update(path.read_bytes())
+                digest.update(_normalized_text_bytes(path))
 
 
 def _profile_asset_hash(profile: LambdaDepsProfile) -> str:
     """Content-aware hash so UI/reporting Lambdas redeploy when source changes."""
     digest = hashlib.sha256(f"{UI_BUNDLE_REVISION}:{profile}".encode("utf-8"))
-    digest.update(_requirements_path(profile).read_bytes())
+    digest.update(_normalized_text_bytes(_requirements_path(profile)))
     _hash_hiveflow_sources(digest, _extra_package_roots(profile))
     for name in ("config.yaml", "process_config.yaml"):
         candidate = PROJECT_ROOT / name
         if candidate.is_file():
             digest.update(name.encode("utf-8"))
-            digest.update(candidate.read_bytes())
+            digest.update(_normalized_text_bytes(candidate))
     return digest.hexdigest()[:32]
 
 
@@ -218,7 +243,7 @@ def _deps_cache_key(profile: LambdaDepsProfile) -> str:
     digest = hashlib.sha256(
         f"{DEPS_CACHE_VERSION}:{profile}:{PIP_PLATFORM}:{PIP_PYTHON}".encode("utf-8")
     )
-    digest.update(_requirements_path(profile).read_bytes())
+    digest.update(_normalized_text_bytes(_requirements_path(profile)))
     return digest.hexdigest()[:32]
 
 
@@ -483,6 +508,7 @@ def hiveflow_lambda_deps_layer(
         "reporting": "HiveFlow reporting Python dependencies (charts/KPIs)",
         "parser": "HiveFlow spreadsheet-parser Python dependencies (interpret/propose)",
         "spreadsheet_lab": "HiveFlow Spreadsheet Lab sandbox Python dependencies",
+        "spreadsheet_lab_materialize": "HiveFlow Spreadsheet Lab materialize-only Python dependencies (pyarrow)",
     }
     return _lambda.LayerVersion(
         scope,

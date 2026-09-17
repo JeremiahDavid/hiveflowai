@@ -48,6 +48,7 @@ JOB_STATUSES = (
     "cleaning",
     "materializing",
     "ready",
+    "no_tables_found",
     "error",
 )
 

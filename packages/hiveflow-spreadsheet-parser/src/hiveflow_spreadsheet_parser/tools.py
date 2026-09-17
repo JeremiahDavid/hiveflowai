@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
+from datetime import date, datetime
 from typing import Any
 
 from hiveflow_core import json_default
@@ -108,7 +109,10 @@ def get_sheet_map_data(session: ParseSession, sheet: str) -> dict[str, Any]:
         "sheet": sheet,
         "shape_map": ov.shape_map,
         "legend": "' '=empty  '.'/':'/'#'=increasing fill; each char is one cell",
-        "empty_row_runs": ov.empty_row_runs,
+        # Bedrock's converse tool-result "document" only accepts JSON-native
+        # types (str/int/bool/float/list/dict) — a bare tuple here fails
+        # botocore's ParamValidationError, confirmed by a real agent call.
+        "empty_row_runs": [list(run) for run in ov.empty_row_runs],
         "merged_ranges": merged,
         "candidates": cands,
     }
@@ -320,6 +324,12 @@ def build_tool_server(session: ParseSession) -> Any:
 
 
 def _short(value: Any, limit: int = 60) -> Any:
+    # Bedrock's converse tool-result "document" only accepts JSON-native
+    # types (str/int/bool/float/list/dict) — a raw datetime/date cell value
+    # here fails botocore's ParamValidationError, confirmed by a real agent
+    # call against a workbook with date cells.
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
     if isinstance(value, str) and len(value) > limit:
         return value[: limit - 1] + "…"
     return value

@@ -15,8 +15,11 @@ already proven in ``hiveflow.spreadsheet.synthesize``.
 from __future__ import annotations
 
 import json
+import logging
 import re
 from typing import Any
+
+_logger = logging.getLogger(__name__)
 
 from hiveflow.spreadsheet._agent_runtime import BedrockTool, run_bedrock_tool_agent
 
@@ -34,6 +37,38 @@ boundaries, then propose corrected `header_row`/`data_start_row`/`data_end_row`/
 `min_col`/`max_col`/`headers` via `corrected_region` on your `propose_table` call
 (omit `corrected_region`, or set it to null, when the original region was already
 correct)."""
+
+_BLIND_SYSTEM_PROMPT = """You are a table-parsing specialist. A deterministic
+detector scanned this sheet's grid and found NO candidate table region —
+this commonly happens on real business-report exports (title rows, a
+parameters block, a footnote off in some far column) that defeat a generic
+header-detection heuristic. Find the primary data table on this sheet
+yourself: use `get_sheet_map` for an overview and `read_range` to confirm
+exact boundaries and headers.
+
+Report the table's exact boundaries via `corrected_region` on your
+`propose_table` call — it is REQUIRED here, since there is no existing
+region to fall back to — along with its business meaning, then call
+`finish`. If you genuinely find no real data table on this sheet (e.g. it's
+a title page or truly empty), call `propose_table` with `corrected_region`
+set to null and explain why in `notes`."""
+
+
+def _normalize_schema(schema: list[Any]) -> list[dict[str, Any]]:
+    """Guarantee every schema entry has a usable ``name`` — belt-and-suspenders
+    on top of the tool's JSON schema requiring it, since a model can still
+    call a tool with a key like ``column`` instead of ``name`` (confirmed by
+    a real proposal on a report-metadata table that did exactly that,
+    leaving every column name blank in the review UI)."""
+    normalized: list[dict[str, Any]] = []
+    for index, entry in enumerate(schema):
+        if not isinstance(entry, dict):
+            continue
+        column = dict(entry)
+        name = column.get("name") or column.get("column") or column.get("field")
+        column["name"] = str(name).strip() if name else f"column_{index + 1}"
+        normalized.append(column)
+    return normalized
 
 
 def _heuristic_extraction(parse_table: dict[str, Any]) -> dict[str, Any]:
@@ -85,7 +120,45 @@ def propose_table_extraction(
             model=model,
         )
     except Exception:  # noqa: BLE001 — never block review on a transient AI failure
+        _logger.exception("propose_table_extraction agent call failed; using heuristic fallback")
         return _heuristic_extraction(parse_table)
+
+
+def propose_table_extraction_blind(
+    *,
+    workbook_path: str | None,
+    sheet: str,
+    invoke: Any = None,
+    model: str | None = None,
+) -> dict[str, Any] | None:
+    """Used only when the deterministic detector found zero candidate regions
+    anywhere in the workbook — asks the agent to locate a table on ``sheet``
+    from scratch, with no candidate region to confirm/correct.
+
+    Unlike ``propose_table_extraction``, there is no heuristic fallback here:
+    without a detector-found region there's nothing sensible to hand back on
+    ``invoke=False``/failure, so this returns ``None`` in every case where a
+    real agent call didn't happen or didn't find a region. Callers treat
+    ``None`` as "no table on this sheet," not as an error.
+    """
+    if invoke is False or not workbook_path:
+        return None
+    try:
+        proposal = _agent_propose(
+            workbook_path,
+            {"sheet": sheet},
+            feedback="",
+            prior_proposal=None,
+            model=model,
+            system_prompt=_BLIND_SYSTEM_PROMPT,
+            blind=True,
+        )
+    except Exception:  # noqa: BLE001 — treat any failure as "found nothing"
+        _logger.exception("propose_table_extraction_blind agent call failed for sheet %r", sheet)
+        return None
+    if not proposal.get("corrected_region"):
+        return None
+    return proposal
 
 
 def _agent_propose(
@@ -95,6 +168,8 @@ def _agent_propose(
     feedback: str,
     prior_proposal: dict[str, Any] | None,
     model: str | None,
+    system_prompt: str = _SYSTEM_PROMPT,
+    blind: bool = False,
 ) -> dict[str, Any]:
     from hiveflow_spreadsheet_parser.readers import read_workbook
     from hiveflow_spreadsheet_parser.tools import (
@@ -112,7 +187,7 @@ def _agent_propose(
             "entity_name": args.get("entity_name"),
             "purpose": args.get("purpose", ""),
             "grain": args.get("grain", ""),
-            "schema": args.get("schema") or [],
+            "schema": _normalize_schema(args.get("schema") or []),
             "corrected_region": args.get("corrected_region") or None,
             "notes": args.get("notes") or [],
         }
@@ -163,7 +238,19 @@ def _agent_propose(
                     "entity_name": {"type": "string"},
                     "purpose": {"type": "string"},
                     "grain": {"type": "string"},
-                    "schema": {"type": "array", "items": {"type": "object"}},
+                    "schema": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "name": {"type": "string"},
+                                "type": {"type": "string"},
+                                "description": {"type": "string"},
+                                "is_key": {"type": "boolean"},
+                            },
+                            "required": ["name"],
+                        },
+                    },
                     "corrected_region": {
                         "type": ["object", "null"],
                         "properties": {
@@ -184,25 +271,28 @@ def _agent_propose(
         BedrockTool("finish", "Call once propose_table has been recorded.", {}, _finish),
     ]
 
-    payload: dict[str, Any] = {
-        "sheet": parse_table.get("sheet"),
-        "candidate_region": {
-            "header_row": parse_table.get("header_row"),
-            "data_start_row": parse_table.get("data_start_row"),
-            "data_end_row": parse_table.get("data_end_row"),
-            "min_col": parse_table.get("min_col"),
-            "max_col": parse_table.get("max_col"),
-            "headers": parse_table.get("headers"),
-        },
-        "sample_rows": parse_table.get("sample_rows"),
-    }
+    if blind:
+        payload: dict[str, Any] = {"sheet": parse_table.get("sheet")}
+    else:
+        payload = {
+            "sheet": parse_table.get("sheet"),
+            "candidate_region": {
+                "header_row": parse_table.get("header_row"),
+                "data_start_row": parse_table.get("data_start_row"),
+                "data_end_row": parse_table.get("data_end_row"),
+                "min_col": parse_table.get("min_col"),
+                "max_col": parse_table.get("max_col"),
+                "headers": parse_table.get("headers"),
+            },
+            "sample_rows": parse_table.get("sample_rows"),
+        }
     if feedback.strip():
         payload["operator_feedback"] = feedback.strip()
     if prior_proposal:
         payload["prior_proposal"] = prior_proposal
 
     run_bedrock_tool_agent(
-        _SYSTEM_PROMPT,
+        system_prompt,
         json.dumps(payload, default=str),
         tools=tools,
         max_turns=12,

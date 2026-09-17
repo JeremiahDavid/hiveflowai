@@ -84,22 +84,37 @@ def compile_file_recipe(job_id: str) -> dict[str, Any]:
     return recipe
 
 
-def replay_file_recipe(job_id: str, parse_payload: dict[str, Any], recipe: dict[str, Any]) -> None:
-    """Write each table doc directly from a matched recipe — zero LLM calls."""
-    parse_tables = {
-        str(t.get("table_id")): t
-        for t in parse_payload.get("tables") or []
-        if isinstance(t, dict)
-    }
+def replay_file_recipe(job_id: str, recipe: dict[str, Any]) -> None:
+    """Write each table doc directly from a matched recipe — zero LLM calls,
+    but NOT zero human review.
+
+    A saved recipe means the agent doesn't need to run again — it does not
+    mean the operator's oversight is skipped too. A table the recipe marked
+    ``approved`` lands back in ``pending_review`` with its ``extract_proposal``
+    pre-filled verbatim from the recipe (so confirming it is a single click,
+    no new AI call and no re-typed feedback), landing it in the same
+    ``awaiting_extract_review`` flow as a fresh upload and letting
+    ``extract_review._maybe_compile_recipe`` carry it into phase 2 exactly
+    like any other table once approved. A table the recipe marked
+    ``discarded`` replays straight to ``discarded`` — that verdict doesn't
+    need re-confirming on every re-upload.
+
+    ``input_shape`` always comes from the recipe, never recomputed from this
+    upload's fresh heuristic parse: a header cell the detector can't read
+    (e.g. a genuinely blank cell whose column the agent named from context,
+    like "service_charge") is blank on every re-upload too, so recomputing
+    would silently rename it back to a generic ``column_N`` and produce a
+    different ``shape_hash`` than the one the table-cleaning recipe (phase 2)
+    was saved under — defeating that recipe's lookup on every replay.
+    Confirmed by a real re-upload where this caused phase 2 to require full
+    review again despite an unchanged file shape.
+    """
     table_ids: list[str] = []
     for entry in recipe.get("tables") or []:
         table_id = str(entry.get("table_id") or "")
         if not table_id:
             continue
-        parse_table = parse_tables.get(table_id, {})
-        input_shape = (
-            compute_input_shape(parse_table) if parse_table else (entry.get("input_shape") or {})
-        )
+        input_shape = entry.get("input_shape") or {}
         table_doc = store.new_table(
             job_id=job_id,
             table_id=table_id,
@@ -108,9 +123,8 @@ def replay_file_recipe(job_id: str, parse_payload: dict[str, Any], recipe: dict[
             input_shape=input_shape,
         )
         table_doc["extract_proposal"] = entry.get("extract_proposal")
-        table_doc["status"] = str(entry.get("status") or "approved")
-        if table_doc["status"] == "approved":
-            store.promote_extract_proposal(table_doc)
+        recipe_status = str(entry.get("status") or "approved")
+        table_doc["status"] = "discarded" if recipe_status == "discarded" else "pending_review"
         store.save_table(table_doc)
         table_ids.append(table_id)
 

@@ -101,6 +101,58 @@ def enqueue_clean_retry_transform(job_id: str, table_id: str, *, feedback: str, 
     _dispatch(job_id, table_id, TASK_CLEAN_RETRY_TRANSFORM, feedback=feedback, invoke=invoke)
 
 
+def run_materialize(job_id: str, table_id: str) -> dict[str, Any] | None:
+    """Materialize an approved table to silver/reference_lab/, returning the
+    ``materialization_payload()`` dict (or None if there was nothing to write).
+
+    Delegates to a separate, dedicated materialize Lambda when
+    ``HIVEFLOW_SPREADSHEET_LAB_MATERIALIZE_FUNCTION`` is set (the deployed
+    configuration): ``pyarrow`` (needed only for the parquet write) can't ship
+    in the same Lambda package as ``pandas``/``pydantic``/``python-calamine``
+    (needed for table extraction/cleaning) without blowing past Lambda's
+    250MB unzipped limit — confirmed by a real deploy failure, not a
+    hypothetical. Locally (no AWS Lambda at all, so the full dev venv has
+    every dependency) this materializes in-process instead, and the
+    ``materialize_lab``/pyarrow import only happens on that path — never
+    eagerly at module load — so the web/worker Lambda's own zip never needs
+    pyarrow installed.
+    """
+    function_name = os.environ.get("HIVEFLOW_SPREADSHEET_LAB_MATERIALIZE_FUNCTION", "").strip()
+    if function_name:
+        return _invoke_materialize_lambda(function_name, job_id, table_id)
+
+    from hiveflow.spreadsheet_lab import materialize_lab, store
+
+    job = store.load_job(job_id) or {}
+    table = store.load_table(job_id, table_id) or {}
+    upload_body = store.load_upload_bytes(job)
+    result = materialize_lab.materialize_approved_table_lab(job=job, table=table, upload_body=upload_body)
+    if result is None:
+        return None
+    return materialize_lab.lab_materialization_payload(result, materialized_at=store.now_iso())
+
+
+def _invoke_materialize_lambda(function_name: str, job_id: str, table_id: str) -> dict[str, Any] | None:
+    """Synchronous cross-Lambda call carrying only ``{job_id, table_id}`` — the
+    materialize Lambda re-reads the workbook itself from S3, so the raw
+    workbook bytes never have to cross a Lambda invoke payload (capped at 6MB
+    for synchronous invokes, easily smaller than a real workbook)."""
+    import boto3
+
+    region = os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION") or "us-east-2"
+    client = boto3.client("lambda", region_name=region)
+    response = client.invoke(
+        FunctionName=function_name,
+        InvocationType="RequestResponse",
+        Payload=json.dumps({"job_id": job_id, "table_id": table_id}).encode("utf-8"),
+    )
+    body = response["Payload"].read().decode("utf-8")
+    if response.get("FunctionError"):
+        raise RuntimeError(f"Spreadsheet Lab materialize invoke failed: {body}")
+    payload = json.loads(body) if body else {}
+    return payload.get("silver")
+
+
 def _load_sample(job: dict[str, Any], table: dict[str, Any]) -> tuple[list[str], list[list[Any]]]:
     """Headers + sample rows for the table's CURRENT region of record.
 

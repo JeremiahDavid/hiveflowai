@@ -1,0 +1,19 @@
+# Spreadsheet Lab materialize-only Lambda — writes the approved, cleaned
+# table to silver/reference_lab/{entity}/data.parquet (worker.run_materialize
+# invokes this synchronously with just {job_id, table_id}; it re-reads the
+# job/table/workbook itself from S3, per hiveflow.spreadsheet_lab.materialize_lab).
+#
+# Deliberately separate from requirements-lambda-spreadsheet-lab.txt: this is
+# the only Spreadsheet Lab Lambda that needs pyarrow, and pyarrow can't ship
+# alongside pandas/pydantic/python-calamine (needed by the web/worker Lambda
+# for table extraction/cleaning) without blowing past Lambda's 250MB unzipped
+# limit — confirmed by a real deploy failure, not a hypothetical. No
+# fastapi/mangum/jinja2 either — this Lambda serves no HTTP traffic. No
+# hiveflow-core/hiveflow_spreadsheet_parser — materialize never calls the agent.
+
+boto3>=1.35.0
+botocore>=1.35.0
+pyyaml>=6.0.0
+typing_extensions>=4.12.0
+openpyxl>=3.1.5
+pyarrow>=18.0.0

@@ -184,8 +184,21 @@ def test_reupload_matching_file_auto_replays_recipe(
     assert second_job["auto_replayed"] is True
     assert second_job["matched_file_recipe_id"] == second_job["file_shape_hash"]
 
-    # Phase 1 replayed with no review needed; phase 2 then auto-started for the
-    # approved table (no matching table recipe yet for this simple shape).
+    # A saved recipe skips the AI call, not the operator's review — the table
+    # comes back pending_review with its prior proposal pre-filled, awaiting
+    # a (zero-AI-call) confirm click, same as any other upload.
+    assert second_job["status"] == "awaiting_extract_review"
+    table = store.load_table(second_job["job_id"], "t0")
+    assert table is not None
+    assert table["phase"] == "extract"
+    assert table["status"] == "pending_review"
+    assert table["extract_proposal"] is not None
+
+    # Confirming it carries the table into phase 2 exactly like a fresh
+    # upload's approval would (no matching table recipe yet for this shape).
+    extract_review.approve_extraction(second_job["job_id"], "t0", invoke=False)
+    second_job = store.load_job(second_job["job_id"])
+    assert second_job is not None
     assert second_job["status"] == "awaiting_clean_review"
     table = store.load_table(second_job["job_id"], "t0")
     assert table is not None
@@ -291,17 +304,80 @@ def test_reupload_replays_both_file_and_table_recipes_with_no_ai_calls(
     clean_review.approve_clean_shape(first_job["job_id"], "t0", invoke=False)
     clean_review.approve_transformation(first_job["job_id"], "t0")
 
-    # Re-upload the identical workbook. invoke is intentionally omitted (defaults
-    # to None / "really call the agent") to prove the replay path never reaches it.
+    # Re-upload the identical workbook. invoke is intentionally omitted on
+    # run_parse (defaults to None / "really call the agent") to prove the
+    # replay path never reaches it.
     second_job = intake.create_job(filename="price_list.xlsx", username="poc")
     intake.store_upload(second_job["job_id"], filename="price_list.xlsx", body=body)
     second_job = intake.run_parse(second_job["job_id"])
 
     assert second_job["auto_replayed"] is True
-    assert second_job["status"] == "ready"
+    assert second_job["status"] == "awaiting_extract_review"
 
     table = store.load_table(second_job["job_id"], "t0")
     assert table is not None
-    assert table["phase"] == "done"
-    assert table["status"] == "approved"
-    assert table["silver"] is not None
+    assert table["phase"] == "extract"
+    assert table["status"] == "pending_review"
+
+    # Confirming extraction (invoke=False here just documents "still no AI
+    # call" — approve_extraction never calls the agent regardless) carries
+    # the table into phase 2 via the matching table recipe, landing it at
+    # the transform-review checkpoint with zero AI calls too.
+    extract_review.approve_extraction(second_job["job_id"], "t0", invoke=False)
+    table = store.load_table(second_job["job_id"], "t0")
+    assert table is not None
+    assert table["phase"] == "clean"
+    assert table["status"] == "pending_transform_review"
+    assert table["clean_shape_status"] == "approved"
+
+    finished = clean_review.approve_transformation(second_job["job_id"], "t0")
+    assert finished["phase"] == "done"
+    assert finished["silver"] is not None
+
+    second_job = store.load_job(second_job["job_id"])
+    assert second_job is not None
+    assert second_job["status"] == "ready"
+
+
+def test_phase2_discard_is_remembered_on_reupload(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A table discarded during phase 2 (clean_review.discard_table) should
+    replay straight to discarded on a later re-upload, not go through review
+    all over again — the file recipe is only compiled once at phase 1
+    (before phase 2 discards can happen), so this only works if the job's
+    finish also recompiles it (see clean_review._maybe_finish_job)."""
+    monkeypatch.setenv("HIVEFLOW_DATA_DIR", str(tmp_path))
+
+    from hiveflow.spreadsheet_lab import clean_review, extract_review, intake, store
+
+    workbook_path = tmp_path / "price_list.xlsx"
+    _build_grouped_price_workbook(workbook_path)
+    body = workbook_path.read_bytes()
+
+    first_job = intake.create_job(filename="price_list.xlsx", username="poc")
+    intake.store_upload(first_job["job_id"], filename="price_list.xlsx", body=body)
+    first_job = intake.run_parse(first_job["job_id"], invoke=False)
+    extract_review.approve_extraction(first_job["job_id"], "t0", invoke=False)
+    clean_review.discard_table(first_job["job_id"], "t0")
+
+    first_job = store.load_job(first_job["job_id"])
+    assert first_job is not None
+    assert first_job["status"] == "ready"
+    table = store.load_table(first_job["job_id"], "t0")
+    assert table is not None
+    assert table["status"] == "discarded"
+
+    second_job = intake.create_job(filename="price_list.xlsx", username="poc")
+    intake.store_upload(second_job["job_id"], filename="price_list.xlsx", body=body)
+    second_job = intake.run_parse(second_job["job_id"])
+
+    assert second_job["auto_replayed"] is True
+    table = store.load_table(second_job["job_id"], "t0")
+    assert table is not None
+    assert table["status"] == "discarded"
+    # Every table is terminal (discarded) with none pending review, so the
+    # job should already be finished with no human action required.
+    second_job = store.load_job(second_job["job_id"])
+    assert second_job is not None
+    assert second_job["status"] == "ready"
