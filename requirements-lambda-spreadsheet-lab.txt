@@ -10,6 +10,10 @@
 # imports hiveflow.dna.web.portal.auth directly to validate the real portal's
 # session cookie (session_from_request duck-types across both frameworks'
 # Request objects) rather than re-implementing session signing/verification.
+# That import also pulls in hiveflow.dna.web's package __init__, which eagerly
+# imports hiveflow.dna.reporting for the reporting-pack contract — hence
+# jsonschema below despite this app never validating a reporting pack itself
+# (confirmed by a real deploy failure: ModuleNotFoundError: jsonschema).
 #
 # Deliberately NO pyarrow here — bundled alongside pandas/pydantic/python-calamine
 # it blows past Lambda's 250MB unzipped limit (confirmed by a real deploy
@@ -23,6 +27,7 @@ pyyaml>=6.0.0
 typing_extensions>=4.12.0
 openpyxl>=3.1.5
 werkzeug>=3.1.0
+jsonschema>=4.23.0
 
 # Web app.
 fastapi>=0.115.0

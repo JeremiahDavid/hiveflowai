@@ -74,18 +74,79 @@ def _lane_for_table(table: dict[str, Any]) -> str:
     return "extracting"
 
 
+# Mirrors hiveflow.dna.web.portal.dna_nav.dna_section_nav(settings=None) — the
+# flat DNA sidebar every other DNA-section portal page falls back to when it
+# has no DnaSettings in hand. Duplicated as plain (path, label) literals
+# rather than imported: dna_nav.py drags in hiveflow.dna.web.portal.catalog,
+# which imports hiveflow.dna.{field_semantics,schema,store,workflow} — the
+# full DNA layer's dependency footprint this Lambda's requirements file
+# (requirements-lambda-spreadsheet-lab.txt) deliberately excludes (see its
+# header comment). A template file has no import-time side effects, so
+# _macros.html was safe to copy verbatim; this Python-level nav data isn't,
+# so keep it in sync with dna_nav.py by hand instead.
+_DNA_NAV_ITEMS: tuple[tuple[str, str], ...] = (
+    ("/portal/semantics/source-docs", "Source Browser"),
+    ("__self__", "Spreadsheet Engine"),
+    ("/portal/dna/kpi-generator", "DNA Engine"),
+    ("/portal/catalog", "DNA Catalog"),
+    ("/portal/dna/data-profile", "Data Profile"),
+    ("/portal/dna/model-mapping", "Model Mapping"),
+)
+
+_TOP_NAV_ITEMS: tuple[tuple[str, str], ...] = (
+    ("/portal", "Reporting"),
+    ("/portal/dna", "DNA"),
+    ("/portal/governance", "Governance"),
+)
+
+
+def _nav_abbrev(label: str) -> str:
+    """Mirrors hiveflow.dna.web.theme._nav_abbrev exactly (see the module-
+    level comment above on why this is copied rather than imported)."""
+    words = [part for part in label.split() if part]
+    if len(words) >= 2:
+        return (words[0][0] + words[1][0]).upper()
+    return label.strip()[:2].upper() or "•"
+
+
 def _layout_ctx(request: Request) -> dict[str, Any]:
     """Chrome context every full-page template needs: the signed-in
-    username and a link back to the real portal (this app owns no session
-    of its own to log out of — see auth.py)."""
+    username, the DNA sidebar (this app's own nav item marked active so the
+    portal's other DNA tools stay one click away), and the top nav/logout
+    links back to the real portal (this app owns no session of its own to
+    log out of — see auth.py)."""
     import os
 
     session = portal_session_from_request(request)
     primary_site = os.getenv("HIVEFLOW_PRIMARY_SITE_URL", "").strip().rstrip("/")
+    cookie_domain = os.getenv("HIVEFLOW_PORTAL_COOKIE_DOMAIN", "").strip()
+    self_url = f"https://spreadsheet-engine{cookie_domain}/" if cookie_domain else "/"
+
+    def portal_url(path: str) -> str:
+        return f"{primary_site}{path}" if primary_site else path
+
+    dna_nav_items = [
+        {
+            "href": self_url if href == "__self__" else portal_url(href),
+            "label": label,
+            "abbrev": _nav_abbrev(label),
+            "active": href == "__self__",
+            "is_ancestor": False,
+            "open": href == "__self__",
+            "children": [],
+        }
+        for href, label in _DNA_NAV_ITEMS
+    ]
+    top_nav_items = [
+        {"href": portal_url(href), "label": label, "active": href == "/portal/dna"}
+        for href, label in _TOP_NAV_ITEMS
+    ]
     return {
         "username": session.username if session else "",
-        "portal_url": primary_site or "/",
-        "logout_url": f"{primary_site}/portal/logout" if primary_site else "/",
+        "brand_href": primary_site + "/" if primary_site else "/",
+        "logout_url": portal_url("/portal/logout"),
+        "dna_nav_items": dna_nav_items,
+        "top_nav_items": top_nav_items,
     }
 
 

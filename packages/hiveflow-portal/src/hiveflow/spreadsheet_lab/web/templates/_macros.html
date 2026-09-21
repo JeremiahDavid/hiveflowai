@@ -1,0 +1,22 @@
+{# Verbatim copy of hiveflow.dna.web's `_macros.html` side-nav macros (same
+   markup, same theme.css classes) — duplicated rather than imported because
+   this app deliberately never imports the production portal's Python web
+   internals (see app.py's module docstring); a template file has no
+   import-time side effects, so copying it carries none of that risk. #}
+{% macro side_nav_link(item, child) %}<a class="portal-side-nav-link{% if child %} is-child{% endif %}{% if item.children %} has-children{% endif %}{% if item.active %} active{% elif item.is_ancestor %} is-ancestor{% endif %}" href="{{ item.href }}" title="{{ item.label }}"{% if item.active %} aria-current="page"{% endif %}><span class="portal-side-nav-icon" aria-hidden="true">{{ item.abbrev }}</span><span class="portal-side-nav-link-text">{{ item.label }}</span></a>{% endmacro %}
+
+{% macro side_nav_item(item, depth=0) %}
+{% if item.children %}
+<div class="portal-side-nav-group{% if item.open %} is-open{% endif %}" data-nav-group>
+  <div class="portal-side-nav-row">
+    <button type="button" class="portal-side-nav-disclosure" aria-expanded="{{ 'true' if item.open else 'false' }}" aria-label="Toggle {{ item.label }} pages">
+      <span class="portal-side-nav-disclosure-icon" aria-hidden="true"></span>
+    </button>
+    {{ side_nav_link(item, depth > 0) }}
+  </div>
+  <div class="portal-side-nav-children" role="group" aria-label="{{ item.label }} pages">{% for child in item.children %}{{ side_nav_item(child, depth + 1) }}{% endfor %}</div>
+</div>
+{% else %}
+{{ side_nav_link(item, depth > 0) }}
+{% endif %}
+{% endmacro %}

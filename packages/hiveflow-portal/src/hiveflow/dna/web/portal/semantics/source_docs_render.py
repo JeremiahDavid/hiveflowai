@@ -22,12 +22,13 @@ from hiveflow.dna.web.portal.dna_nav import (
     source_docs_inspector_path,
     source_label,
 )
+from hiveflow.dna.web.routing_helpers import _app_url
 from hiveflow.dna.web.templating import render_template
 from hiveflow.dna.web.theme import page_header
 
 
 def _url(request: Request) -> Callable[[str], str]:
-    return lambda path: f"{request.script_root}{path if path.startswith('/') else f'/{path}'}"
+    return lambda path: _app_url(request, path)
 
 
 def _json_for_script(payload: Any) -> str:

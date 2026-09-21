@@ -30,6 +30,7 @@ from hiveflow.dna.web.theme import (
 )
 from hiveflow.dna.web.portal.catalog import CATALOG_ROOT
 from hiveflow.dna.web.portal.dna_nav import DNA_ROOT, dna_section_nav
+from hiveflow.dna.web.routing_helpers import _app_url
 from hiveflow.dna.web.portal.reporting_layout import (
     is_chart_catalog_page,
     reporting_data_menu,
@@ -413,7 +414,7 @@ def _html_response(
     reporting_override: dict[str, Any] | None = None,
     preview_meta: dict[str, Any] | None = None,
 ) -> Response:
-    url = lambda path: f"{request.script_root}{path if path.startswith('/') else f'/{path}'}"
+    url = lambda path: _app_url(request, path)
     charts_assets = charts_page_assets(url) if use_charts else ""
     data_menu = (
         reporting_data_menu(settings, override=reporting_override)
@@ -470,7 +471,7 @@ def render_overview(
     page = page or {}
     workflow = load_workflow_state(settings, settings.dna_config_id)
     manifest = read_json_artifact(settings, f"{settings.gold_dna_prefix}/manifest.json") or {}
-    url: Callable[[str], str] = lambda path: f"{request.script_root}{path if path.startswith('/') else f'/{path}'}"
+    url: Callable[[str], str] = lambda path: _app_url(request, path)
     active_path = str(page.get("path") or "/portal")
     title = str(page.get("title") or "Reporting")
 
@@ -554,7 +555,7 @@ def render_pillar_hub(
     description = str(page.get("description") or "Configured reports for this business pillar.")
     active_path = str(page.get("path") or "/portal")
     pillar = str(page.get("pillar") or "sales").title()
-    url: Callable[[str], str] = lambda path: f"{request.script_root}{path if path.startswith('/') else f'/{path}'}"
+    url: Callable[[str], str] = lambda path: _app_url(request, path)
     body = page_header(title, description, eyebrow=pillar)
     body += f'<section class="section"><div class="card">{_pillar_hub_links(page, url, settings=settings)}</div></section>'
     return _html_response(
@@ -724,7 +725,7 @@ def render_data_profile_index(
     from hiveflow.dna.web.portal.data_profile_ui.service import list_profile_rows
     from hiveflow.dna.web.portal.dna_nav import DATA_PROFILE_ROOT
 
-    url: Callable[[str], str] = lambda path: f"{request.script_root}{path if path.startswith('/') else f'/{path}'}"
+    url: Callable[[str], str] = lambda path: _app_url(request, path)
     rows = list_profile_rows(settings, configured_sources=configured_sources)
     body = page_header(
         "Data Profile",
@@ -758,7 +759,7 @@ def render_data_profile_detail(
     from hiveflow.dna.web.portal.data_profile_ui.service import load_profile
     from hiveflow.dna.web.portal.dna_nav import DATA_PROFILE_ROOT
 
-    url: Callable[[str], str] = lambda path: f"{request.script_root}{path if path.startswith('/') else f'/{path}'}"
+    url: Callable[[str], str] = lambda path: _app_url(request, path)
     profile = load_profile(settings, source, entity)
     body = page_header(f"{source}.{entity}", "Data profile", eyebrow="DNA · Data Profile")
     if message:
@@ -797,7 +798,7 @@ def render_model_mapping(
     )
     from hiveflow.dna.industry_mapping import mapping_completion
 
-    url: Callable[[str], str] = lambda path: f"{request.script_root}{path if path.startswith('/') else f'/{path}'}"
+    url: Callable[[str], str] = lambda path: _app_url(request, path)
     mapping = load_current_mapping(settings)
     template = load_template_for(mapping) if mapping is not None else None
     completion = mapping_completion(mapping, template) if mapping is not None else None
@@ -1388,7 +1389,7 @@ def render_kpi_generator(
     from hiveflow.dna.web.portal.governance_helpers.bedrock_usage import usage_summary as bedrock_usage_summary
     from hiveflow.dna.web.portal.kpi_generator.render import render_kpi_generator_body
 
-    url: Callable[[str], str] = lambda path: f"{request.script_root}{path if path.startswith('/') else f'/{path}'}"
+    url: Callable[[str], str] = lambda path: _app_url(request, path)
     usage = None
     if is_admin:
         usage = bedrock_usage_summary(
@@ -1468,7 +1469,7 @@ def render_governance(
         workflow.get("active_reporting_version") or reporting.get("version") or active_version
     )
 
-    url: Callable[[str], str] = lambda path: f"{request.script_root}{path if path.startswith('/') else f'/{path}'}"
+    url: Callable[[str], str] = lambda path: _app_url(request, path)
     dna_history = _filter_pack_history(history, "dna")
     reporting_history = _filter_pack_history(history, "reporting")
     governance_form_action = url("/portal/governance")
@@ -1610,7 +1611,7 @@ def render_admin_users(
 ) -> Response:
     from hiveflow.dna.web.portal.cognito import PORTAL_ROLE_ADMIN, PORTAL_ROLE_MEMBER
 
-    url: Callable[[str], str] = lambda path: f"{request.script_root}{path if path.startswith('/') else f'/{path}'}"
+    url: Callable[[str], str] = lambda path: _app_url(request, path)
     seat_count = len(users)
     at_capacity = seat_count >= client.max_users
     users_path = "/portal/governance/users"

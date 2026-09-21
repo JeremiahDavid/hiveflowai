@@ -1,3 +1,4 @@
+{% import "_macros.html" as macros %}
 <!doctype html>
 <html lang="en">
 <head>
@@ -19,25 +20,26 @@
   </script>
 </head>
 <body>
-  <div class="shell">
+  <div class="shell shell-with-sidebar">
     <header class="topbar">
       <div class="topbar-inner">
-        <a class="brand" href="{{ portal_url }}">
+        <a class="brand" href="{{ brand_href }}">
           <img class="brand-icon-light" src="/static/hiveflowai-logo.svg" alt="hiveflowAI symbol" width="36" height="36">
           <img class="brand-icon-dark" src="/static/hiveflowai-logo-reversed.svg" alt="hiveflowAI symbol" width="36" height="36">
           <div class="brand-text">
             <div class="brand-name">hiveflow<span>AI</span></div>
-            <div class="brand-tagline">Spreadsheet Engine</div>
+            <div class="brand-tagline">Connect. Unify. Reveal.</div>
           </div>
         </a>
         <div class="topbar-main">
           <div class="nav-actions">
             <nav class="nav" aria-label="Primary">
-              <a class="nav-link" href="/">Jobs</a>
-              <a class="nav-link" href="{{ portal_url }}">Portal</a>
+              {% for item in top_nav_items %}
+              <a class="nav-link{% if item.active %} active{% endif %}" href="{{ item.href }}"{% if item.active %} aria-current="page"{% endif %}>{{ item.label }}</a>
+              {% endfor %}
             </nav>
             {% if username %}
-            <span class="badge">{{ username }}</span>
+            <span class="portal-badge">{{ username }}</span>
             <a class="nav-link" href="{{ logout_url }}">Sign out</a>
             {% endif %}
             <button type="button" class="theme-toggle" id="themeToggle" aria-label="Switch to dark theme">
@@ -47,13 +49,24 @@
         </div>
       </div>
     </header>
-    <main>
-      <div class="portal-content">{% block content %}{% endblock %}</div>
-    </main>
-    <footer class="footer">
-      <span>Spreadsheet Engine</span>
-      <span>Powered by HiveFlow DNA</span>
-    </footer>
+    <div class="portal-workspace">
+      <aside class="portal-side-nav" data-nav-id="dna" aria-label="DNA navigation">
+        <div class="portal-side-nav-header">
+          <span class="portal-side-nav-title">DNA</span>
+          <button type="button" class="portal-side-nav-toggle" aria-label="Collapse DNA navigation" aria-expanded="true">
+            <span class="portal-side-nav-toggle-icon" aria-hidden="true">⟨</span>
+          </button>
+        </div>
+        <nav class="portal-side-nav-links">{% for item in dna_nav_items %}{{ macros.side_nav_item(item) }}{% endfor %}</nav>
+      </aside>
+      <div class="portal-main">
+        <div class="portal-content">{% block content %}{% endblock %}</div>
+        <footer class="footer portal-footer">
+          <span>Spreadsheet Engine</span>
+          <span>Powered by HiveFlow DNA</span>
+        </footer>
+      </div>
+    </div>
   </div>
   <script>
   (function () {
@@ -99,6 +112,61 @@
       try {
         window.localStorage.setItem(STORAGE_KEY, next);
       } catch (err) { /* ignore */ }
+    });
+  })();
+  </script>
+  <script>
+  (function () {
+    var storagePrefix = "hiveflow-portal-side-nav-";
+
+    function applyCollapsed(nav, collapsed) {
+      nav.classList.toggle("is-collapsed", collapsed);
+      document.body.classList.toggle("portal-sidebar-collapsed", collapsed);
+      var toggle = nav.querySelector(".portal-side-nav-toggle");
+      if (!toggle) return;
+      toggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
+      toggle.setAttribute(
+        "aria-label",
+        collapsed ? "Expand navigation" : "Collapse navigation"
+      );
+      var icon = toggle.querySelector(".portal-side-nav-toggle-icon");
+      if (icon) icon.textContent = collapsed ? "⟩" : "⟨";
+    }
+
+    document.querySelectorAll(".portal-side-nav").forEach(function (nav) {
+      var navId = nav.getAttribute("data-nav-id") || "default";
+      var storageKey = storagePrefix + navId;
+      var stored = null;
+      try {
+        stored = window.localStorage.getItem(storageKey);
+      } catch (err) {
+        stored = null;
+      }
+      if (stored === "collapsed") applyCollapsed(nav, true);
+      else if (stored === "expanded") applyCollapsed(nav, false);
+
+      var toggle = nav.querySelector(".portal-side-nav-toggle");
+      if (!toggle) return;
+      toggle.addEventListener("click", function () {
+        var collapsed = !nav.classList.contains("is-collapsed");
+        applyCollapsed(nav, collapsed);
+        try {
+          window.localStorage.setItem(storageKey, collapsed ? "collapsed" : "expanded");
+        } catch (err) { /* ignore */ }
+      });
+    });
+
+    document.querySelectorAll("[data-nav-group]").forEach(function (group) {
+      var disclosure = group.querySelector(".portal-side-nav-disclosure");
+      var parentLink = group.querySelector(".portal-side-nav-link.has-children");
+      if (!disclosure || !parentLink) return;
+
+      disclosure.addEventListener("click", function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        group.classList.toggle("is-open");
+        disclosure.setAttribute("aria-expanded", group.classList.contains("is-open") ? "true" : "false");
+      });
     });
   })();
   </script>

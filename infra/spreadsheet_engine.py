@@ -92,11 +92,12 @@ def create_spreadsheet_engine(
     shared_role = _create_shared_execution_role(scope, environment=env)
     grant_bedrock(shared_role)
 
+    materialize_function_name = f"spreadsheet-engine-{env}-materialize"
     materialize_runtime = hiveflow_lambda_runtime(scope, profile="spreadsheet_lab_materialize")
     materialize_fn = _lambda.Function(
         scope,
         f"{prefix}MaterializeFunction",
-        function_name=f"spreadsheet-engine-{env}-materialize",
+        function_name=materialize_function_name,
         runtime=_lambda.Runtime.PYTHON_3_12,
         handler="hiveflow.spreadsheet_lab.materialize_lab.lambda_handler",
         timeout=Duration.minutes(2),
@@ -115,7 +116,13 @@ def create_spreadsheet_engine(
         "HIVEFLOW_ENVIRONMENT": env,
         "HIVEFLOW_TENANT_ASSUME_ROLE": "1",
         "HIVEFLOW_BEDROCK_MODEL_ID": "us.anthropic.claude-haiku-4-5-20251001-v1:0",
-        "HIVEFLOW_SPREADSHEET_LAB_MATERIALIZE_FUNCTION": materialize_fn.function_name,
+        # The literal name (not materialize_fn.function_name, a CloudFormation
+        # token) — both functions share one execution role, so a token
+        # reference here plus the grant below would close a circular
+        # dependency through that role's policy (confirmed by a real deploy
+        # failure: "Circular dependency between resources" naming both
+        # functions and SpreadsheetLambdaRoleDefaultPolicy).
+        "HIVEFLOW_SPREADSHEET_LAB_MATERIALIZE_FUNCTION": materialize_function_name,
     }
     if zone_name:
         environment_vars["HIVEFLOW_PORTAL_COOKIE_DOMAIN"] = f".{zone_name}"
@@ -170,7 +177,23 @@ def create_spreadsheet_engine(
     )
 
     # Synchronous cross-Lambda call for the parquet write (worker.run_materialize).
-    materialize_fn.grant_invoke(ui_fn)
+    # Same reasoning as the self-invoke grant above: built from the literal
+    # materialize_function_name, NOT materialize_fn.grant_invoke(ui_fn) (which
+    # would reference materialize_fn.function_arn, a token) — both functions
+    # share shared_role, so a token reference here closes a circular
+    # dependency through that role's policy.
+    materialize_invoke_arn = Stack.of(scope).format_arn(
+        service="lambda",
+        resource="function",
+        resource_name=materialize_function_name,
+        arn_format=ArnFormat.COLON_RESOURCE_NAME,
+    )
+    shared_role.add_to_policy(
+        iam.PolicyStatement(
+            actions=["lambda:InvokeFunction"],
+            resources=[materialize_invoke_arn],
+        )
+    )
 
     web_api = apigateway.RestApi(
         scope,
