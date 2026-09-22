@@ -7,7 +7,11 @@ from pathlib import Path
 import pytest
 
 from hiveflow.dna.settings import DnaSettings
-from hiveflow.dna.web.portal.dna_nav import KPI_GENERATOR_ROOT, dna_section_nav
+from hiveflow.dna.web.portal.dna_nav import (
+    KPI_GENERATOR_ROOT,
+    agents_section_nav,
+    dna_section_nav,
+)
 from hiveflow.dna.web.portal.kpi_generator.render import render_kpi_generator_body
 from hiveflow.dna.web.portal.kpi_generator.sql_format import format_kpi_sql
 from hiveflow.dna.web.portal.kpi_generator.drafts import (
@@ -33,10 +37,16 @@ from hiveflow.ingest.storage import write_parquet_local
 from hiveflow.storage.paths import prefix_path, silver_entity_prefix, silver_stg_entity_prefix
 
 
-def test_dna_nav_lists_source_browser_kpi_generator_and_catalog() -> None:
+def test_dna_nav_lists_source_browser_and_catalog() -> None:
     labels = [item[1] for item in dna_section_nav(None)]
-    assert labels == ["Source Browser", "DNA Engine", "DNA Catalog", "Data Profile", "Model Mapping"]
+    assert labels == ["Source Browser", "DNA Catalog", "Data Profile", "Model Mapping"]
     assert KPI_GENERATOR_ROOT == "/portal/dna/kpi-generator"
+
+
+def test_agents_nav_lists_dna_engine() -> None:
+    labels = [item[1] for item in agents_section_nav()]
+    assert labels[0] == "DNA Engine"
+    assert agents_section_nav()[0][0] == KPI_GENERATOR_ROOT
 
 
 def test_build_fields_by_fact_single_pass() -> None:

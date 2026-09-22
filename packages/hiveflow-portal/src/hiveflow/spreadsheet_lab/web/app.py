@@ -8,10 +8,13 @@ sharing only the portal's session/tenant machinery (see ``auth.py``/
 
 from __future__ import annotations
 
+import hashlib
+from functools import lru_cache
 from typing import Any
 
 from fastapi import FastAPI, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
+from markupsafe import Markup
 
 from hiveflow.spreadsheet_lab import clean_review, extract_review, intake, store
 from hiveflow.spreadsheet_lab.web.auth import portal_login_url, portal_session_from_request
@@ -32,25 +35,43 @@ _DNA_STATIC_ASSETS: dict[str, str] = {
 }
 
 
+@lru_cache(maxsize=None)
+def _static_asset_version(filename: str) -> str:
+    """Content-hash cache-buster, mirroring hiveflow.dna.web.theme's own
+    ``_static_asset_version`` (not imported — see this module's docstring on
+    why this app never imports dna.web internals). Without a ``?v=`` on the
+    URL, an edit to theme.css sits invisible behind the browser's cache of
+    ``dna_static``'s ``Cache-Control: max-age=3600`` below until it expires."""
+    try:
+        from importlib.resources import files
+
+        data = (files("hiveflow.dna.web") / "static" / filename).read_bytes()
+    except OSError:
+        return "0"
+    return hashlib.sha256(data).hexdigest()[:10]
+
+
 # Ordered left-to-right; a table's current (phase, status) maps to exactly one
 # of these via `_lane_for_table` — this is the Kanban board's column set.
-# "discarded" is last and reachable from any other lane (drag-and-drop and
-# the per-table Discard buttons both land there), everything else only ever
-# moves strictly forward.
+# "discarded" is last, rendered as its own always-visible row rather than a
+# board column, and reachable from any other lane (drag-and-drop and the
+# per-table Discard buttons both land there); everything else only ever
+# moves strictly forward. A table sitting "approved, awaiting its siblings to
+# finish extraction" has no decision to make (it's not in
+# _LANE_APPROVE_ACTIONS below) — it stays in "Extract" rather than getting
+# its own column, since that intermediate state is pure pass-through.
 _LANE_DEFS: list[tuple[str, str]] = [
-    ("extracting", "1 · Extracting"),
-    ("extract_approved", "2 · Approved — awaiting cleaning"),
-    ("cleaning_shape", "3 · Cleaning: shape"),
-    ("cleaning_transform", "4 · Cleaning: transform"),
-    ("done", "5 · Done"),
+    ("extracting", "1 · Extract"),
+    ("cleaning_shape", "2 · Clean: shape"),
+    ("cleaning_transform", "3 · Clean: transform"),
+    ("done", "4 · Done"),
     ("discarded", "Discarded"),
 ]
 _LANE_ORDER: dict[str, int] = {key: index for index, (key, _label) in enumerate(_LANE_DEFS)}
 
 # Which lanes have a bulk "approve all" action, and which single-table
 # approve function it fans out to — only lanes with actionable
-# (pending-review) tables get one; extract_approved/done/discarded have
-# nothing to approve.
+# (pending-review) tables get one; done/discarded have nothing to approve.
 _LANE_APPROVE_ACTIONS: dict[str, tuple[str, str]] = {
     "extracting": ("pending_review", "approve_extraction"),
     "cleaning_shape": ("pending_shape_review", "approve_clean_shape"),
@@ -62,9 +83,8 @@ def _lane_for_table(table: dict[str, Any]) -> str:
     if table.get("status") == "discarded":
         return "discarded"
     phase = table.get("phase")
-    status = table.get("status")
     if phase == "extract":
-        return "extract_approved" if status == "approved" else "extracting"
+        return "extracting"
     if phase == "clean":
         if table.get("clean_shape_status") != "approved":
             return "cleaning_shape"
@@ -74,30 +94,47 @@ def _lane_for_table(table: dict[str, Any]) -> str:
     return "extracting"
 
 
-# Mirrors hiveflow.dna.web.portal.dna_nav.dna_section_nav(settings=None) — the
-# flat DNA sidebar every other DNA-section portal page falls back to when it
-# has no DnaSettings in hand. Duplicated as plain (path, label) literals
-# rather than imported: dna_nav.py drags in hiveflow.dna.web.portal.catalog,
-# which imports hiveflow.dna.{field_semantics,schema,store,workflow} — the
-# full DNA layer's dependency footprint this Lambda's requirements file
+# Mirrors hiveflow.dna.web.portal.dna_nav.agents_section_nav() — the Agents
+# sidebar every other Agents-section portal page (i.e. the DNA Engine) falls
+# back to. Duplicated as plain (path, label, icon) literals rather than
+# imported: dna_nav.py drags in hiveflow.dna.web.portal.catalog, which
+# imports hiveflow.dna.{field_semantics,schema,store,workflow} — the full DNA
+# layer's dependency footprint this Lambda's requirements file
 # (requirements-lambda-spreadsheet-lab.txt) deliberately excludes (see its
 # header comment). A template file has no import-time side effects, so
 # _macros.html was safe to copy verbatim; this Python-level nav data isn't,
-# so keep it in sync with dna_nav.py by hand instead.
-_DNA_NAV_ITEMS: tuple[tuple[str, str], ...] = (
-    ("/portal/semantics/source-docs", "Source Browser"),
-    ("__self__", "Spreadsheet Engine"),
-    ("/portal/dna/kpi-generator", "DNA Engine"),
-    ("/portal/catalog", "DNA Catalog"),
-    ("/portal/dna/data-profile", "Data Profile"),
-    ("/portal/dna/model-mapping", "Model Mapping"),
+# so keep it in sync with dna_nav.py/theme.py by hand instead.
+_AGENTS_NAV_ITEMS: tuple[tuple[str, str, str], ...] = (
+    ("/portal/dna/kpi-generator", "DNA Engine", "dna"),
+    ("__self__", "Spreadsheet Engine", "spreadsheet"),
 )
 
 _TOP_NAV_ITEMS: tuple[tuple[str, str], ...] = (
     ("/portal", "Reporting"),
     ("/portal/dna", "DNA"),
+    ("/portal/dna/kpi-generator", "Agents"),
     ("/portal/governance", "Governance"),
 )
+
+# Mirrors hiveflow.dna.web.theme._SIDE_NAV_GLYPHS (see the module-level
+# comment above on why this is copied rather than imported).
+_SIDE_NAV_GLYPHS: dict[str, str] = {
+    "dna": (
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+        'stroke-width="1.6" stroke-linecap="round" aria-hidden="true">'
+        '<path d="M7 3c0 4 10 4 10 8s-10 4-10 8"/>'
+        '<path d="M17 3c0 4-10 4-10 8s10 4 10 8"/>'
+        '<path d="M8 6.5h8M8 17.5h8M7.3 12h9.4"/>'
+        "</svg>"
+    ),
+    "spreadsheet": (
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+        'stroke-width="1.6" stroke-linejoin="round" aria-hidden="true">'
+        '<rect x="3.5" y="4" width="17" height="16" rx="1.5"/>'
+        '<path d="M3.5 9.5h17M3.5 15h17M9.5 4v16M15 4v16" stroke-width="1.3"/>'
+        "</svg>"
+    ),
+}
 
 
 def _nav_abbrev(label: str) -> str:
@@ -111,10 +148,10 @@ def _nav_abbrev(label: str) -> str:
 
 def _layout_ctx(request: Request) -> dict[str, Any]:
     """Chrome context every full-page template needs: the signed-in
-    username, the DNA sidebar (this app's own nav item marked active so the
-    portal's other DNA tools stay one click away), and the top nav/logout
-    links back to the real portal (this app owns no session of its own to
-    log out of — see auth.py).
+    username, the Agents sidebar (this app's own nav item marked active so
+    the DNA Engine stays one click away), and the top nav/logout links back
+    to the real portal (this app owns no session of its own to log out of —
+    see auth.py).
 
     DNA/reporting pages live only on the tenant's own subdomain
     (``{client_id}.{cookie_domain}``) — the bare primary site
@@ -137,28 +174,35 @@ def _layout_ctx(request: Request) -> dict[str, Any]:
         base = tenant_site or primary_site
         return f"{base}{path}" if base else path
 
-    dna_nav_items = [
+    agents_nav_items = [
         {
             "href": self_url if href == "__self__" else portal_url(href),
             "label": label,
             "abbrev": _nav_abbrev(label),
+            "icon_svg": Markup(_SIDE_NAV_GLYPHS[icon]) if icon in _SIDE_NAV_GLYPHS else None,
             "active": href == "__self__",
             "is_ancestor": False,
             "open": href == "__self__",
             "children": [],
         }
-        for href, label in _DNA_NAV_ITEMS
+        for href, label, icon in _AGENTS_NAV_ITEMS
     ]
     top_nav_items = [
-        {"href": portal_url(href), "label": label, "active": href == "/portal/dna"}
+        {"href": portal_url(href), "label": label, "active": label == "Agents"}
         for href, label in _TOP_NAV_ITEMS
     ]
     return {
         "username": session.username if session else "",
         "brand_href": primary_site + "/" if primary_site else "/",
         "logout_url": portal_url("/portal/logout"),
-        "dna_nav_items": dna_nav_items,
+        "agents_nav_items": agents_nav_items,
         "top_nav_items": top_nav_items,
+        "theme_css_href": f"/static/theme.css?v={_static_asset_version('theme.css')}",
+        "logo_href": f"/static/hiveflowai-logo.svg?v={_static_asset_version('hiveflowai-logo.svg')}",
+        "logo_reversed_href": (
+            f"/static/hiveflowai-logo-reversed.svg?v={_static_asset_version('hiveflowai-logo-reversed.svg')}"
+        ),
+        "favicon_href": f"/static/hiveflowai-logo-mono.svg?v={_static_asset_version('hiveflowai-logo-mono.svg')}",
     }
 
 

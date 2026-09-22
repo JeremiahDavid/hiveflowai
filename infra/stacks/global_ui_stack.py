@@ -188,12 +188,16 @@ class GlobalUiStack(Stack):
             generate_secret=False,
         )
 
+        from hiveflow.project_config import portal_session_secret_name
+
         session_secret = secretsmanager.Secret(
             self,
             "PortalSessionSecret",
             # Pinned to the pre-rebrand name — Secret.Name forces CFN replacement,
             # which would orphan the already-deployed secret. See pool_name above.
-            secret_name=f"meshflow-platform-portal-session-{environment.lower()}",
+            # Name shared with GlobalAgentPipelinesStack, which imports this same
+            # secret by name rather than depending on this stack being constructed.
+            secret_name=portal_session_secret_name(environment),
             description=f"HiveFlowAI global portal session signing secret for {environment}",
             generate_secret_string=secretsmanager.SecretStringGenerator(
                 password_length=48,

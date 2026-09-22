@@ -29,7 +29,12 @@ from hiveflow.dna.web.theme import (
     render_portal_page,
 )
 from hiveflow.dna.web.portal.catalog import CATALOG_ROOT
-from hiveflow.dna.web.portal.dna_nav import DNA_ROOT, dna_section_nav
+from hiveflow.dna.web.portal.dna_nav import (
+    DNA_ROOT,
+    KPI_GENERATOR_ROOT,
+    agents_section_nav,
+    dna_section_nav,
+)
 from hiveflow.dna.web.routing_helpers import _app_url
 from hiveflow.dna.web.portal.reporting_layout import (
     is_chart_catalog_page,
@@ -50,8 +55,11 @@ REVENUE_OUTPUT_ID = REVENUE_OUTPUT_ID
 REVENUE_TABLE_LIMIT = DEFAULT_TABLE_LIMIT
 REVENUE_TREND_MONTHS = DEFAULT_CHART_MONTHS
 
+AGENTS_ROOT = KPI_GENERATOR_ROOT
+
 PORTAL_NAV = (
     (DNA_ROOT, "DNA"),
+    (AGENTS_ROOT, "Agents"),
     ("/portal/governance", "Governance"),
 )
 
@@ -253,6 +261,8 @@ def _portal_nav_links(*, is_admin: bool = False) -> tuple[tuple[str, str], ...]:
 
 
 def _portal_nav_active_path(active_path: str) -> str:
+    if active_path.startswith(AGENTS_ROOT):
+        return AGENTS_ROOT
     if (
         active_path.startswith("/portal/semantics")
         or active_path.startswith("/portal/catalog")
@@ -386,7 +396,10 @@ def _portal_side_nav(
     active_path: str,
     data_menu: tuple[Any, ...],
     dna_menu: tuple[Any, ...] | None = None,
+    agents_menu: tuple[Any, ...] | None = None,
 ) -> tuple[str | None, tuple[Any, ...] | None, str | None]:
+    if active_path.startswith(AGENTS_ROOT):
+        return "Agents", agents_menu or agents_section_nav(), "agents"
     if (
         active_path.startswith("/portal/semantics")
         or active_path.startswith("/portal/catalog")
@@ -424,6 +437,7 @@ def _html_response(
     if not data_menu:
         data_menu = PORTAL_DATA_MENU
     dna_menu = dna_section_nav(settings)
+    agents_menu = agents_section_nav()
     if preview_meta:
         body = (
             _preview_banner_html(
@@ -436,7 +450,7 @@ def _html_response(
     sidebar_active_path = active_path
     nav_active_path = _portal_nav_active_path(active_path)
     side_nav_title, side_nav_items, side_nav_id = _portal_side_nav(
-        active_path, data_menu, dna_menu
+        active_path, data_menu, dna_menu, agents_menu
     )
     return Response(
         render_portal_page(
@@ -1385,7 +1399,6 @@ def render_kpi_generator(
     refresh_status: dict[str, Any] | None = None,
     refresh_quota: dict[str, Any] | None = None,
 ) -> Response:
-    from hiveflow.dna.web.portal.dna_nav import KPI_GENERATOR_ROOT
     from hiveflow.dna.web.portal.governance_helpers.bedrock_usage import usage_summary as bedrock_usage_summary
     from hiveflow.dna.web.portal.kpi_generator.render import render_kpi_generator_body
 
@@ -1401,7 +1414,7 @@ def render_kpi_generator(
         "DNA Engine",
         "Natural language KPIs backed by version-pinned Athena SQL. "
         "Uses Source Browser gold YAML as reference; approved SQL is replayed verbatim on refresh.",
-        eyebrow="DNA",
+        eyebrow="Agents",
     )
     body += render_kpi_generator_body(
         settings=settings,

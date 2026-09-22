@@ -8,83 +8,111 @@
     {%- endif -%}
   {%- endmacro %}
 
-  <header class="page-header">
-    <div class="eyebrow">Spreadsheet Engine</div>
-    <h1>{{ job.filename }}</h1>
-    <p class="subtitle">job {{ job.job_id }}</p>
-  </header>
-
-  <div class="card">
-    <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:1rem;">
-      <span class="{{ status_class(job.status, '') }}">{{ job.status }}</span>
+  {% macro board_tile(job, lane, table) %}
+    {% set forward_url = "" %}
+    {% set discard_url = "" %}
+    {% if table.phase == "extract" and table.status in ("pending_review", "rejected_retry") %}
+      {% set forward_url = "/jobs/" ~ job.job_id ~ "/tables/" ~ table.table_id ~ "/approve" %}
+      {% set discard_url = "/jobs/" ~ job.job_id ~ "/tables/" ~ table.table_id ~ "/discard" %}
+    {% elif table.phase == "clean" and table.status == "pending_shape_review" %}
+      {% set forward_url = "/jobs/" ~ job.job_id ~ "/tables/" ~ table.table_id ~ "/approve-clean-shape" %}
+      {% set discard_url = "/jobs/" ~ job.job_id ~ "/tables/" ~ table.table_id ~ "/discard-clean" %}
+    {% elif table.phase == "clean" and table.status == "pending_transform_review" %}
+      {% set forward_url = "/jobs/" ~ job.job_id ~ "/tables/" ~ table.table_id ~ "/approve-transformation" %}
+      {% set discard_url = "/jobs/" ~ job.job_id ~ "/tables/" ~ table.table_id ~ "/discard-clean" %}
+    {% endif %}
+    <div class="se-board-tile{% if lane.key == 'discarded' %} is-discarded{% endif %}"
+         data-table-id="{{ table.table_id }}"
+         data-lane-order="{{ lane.order }}"
+         {% if forward_url %}data-approve-url="{{ forward_url }}"{% endif %}
+         {% if discard_url %}data-discard-url="{{ discard_url }}"{% endif %}
+         draggable="{{ 'true' if (forward_url or discard_url) else 'false' }}"
+         ondragstart="onCardDragStart(event)"
+         ondragend="onCardDragEnd(event)"
+         onclick="document.getElementById('modal-{{ table.table_id }}').classList.add('is-open')">
+      <div class="se-board-tile-title">{{ table.entity_name or table.table_id }}</div>
+      <div class="se-board-tile-sub">{{ table.table_id }} &middot; sheet: {{ table.sheet }}</div>
+      <span class="{{ status_class(table.status, table.phase) }} se-board-tile-badge">{{ table.status }}</span>
     </div>
-    {% if job.auto_replayed %}
-      <p class="form-hint" style="margin-top:0.75rem;">
-        This file matched a saved recipe (id <code>{{ job.matched_file_recipe_id }}</code>) — table
-        extraction and cleaning were replayed automatically with no AI calls. Previously-approved
-        tables still need a quick confirm below; previously-discarded tables are already in the
-        Discarded lane.
-      </p>
-      <form method="post" action="/jobs/{{ job.job_id }}/force-rerun">
-        <button class="button" type="submit">Force re-run (ignore the matched recipe)</button>
-      </form>
-    {% endif %}
-    {% if job.error %}
-      <p class="form-error" style="margin-top:0.75rem;">{{ job.error }}</p>
-    {% endif %}
-  </div>
+  {% endmacro %}
 
-  {% if not tables and job.status not in ("no_tables_found", "error") %}
-    <div class="empty">Parsing — tables will appear here shortly.</div>
-  {% endif %}
+  <div class="se-page">
+    <p class="se-back-row"><a class="se-back-link" href="/">&larr; Spreadsheet Engine</a></p>
 
-  {% if tables %}
-    <div class="se-board">
-      {% for lane in lanes %}
-        <div class="se-board-lane" data-lane-key="{{ lane.key }}" data-lane-order="{{ lane.order }}"
-             ondragover="onLaneDragOver(event)" ondragleave="onLaneDragLeave(event)" ondrop="onLaneDrop(event)">
-          <div class="se-board-lane-head">
-            <h3>{{ lane.label }} ({{ lane.tables | length }})</h3>
-            {% if lane.approve_status and (lane.tables | selectattr("status", "equalto", lane.approve_status) | list | length > 0) %}
-              <form method="post" action="/jobs/{{ job.job_id }}/approve-all/{{ lane.key }}">
-                <button type="submit" class="button primary se-board-lane-approve-all">Approve all</button>
-              </form>
-            {% endif %}
-          </div>
-          {% if not lane.tables %}
-            <div class="se-board-lane-empty">Empty</div>
-          {% endif %}
-          {% for table in lane.tables %}
-            {% set forward_url = "" %}
-            {% set discard_url = "" %}
-            {% if table.phase == "extract" and table.status in ("pending_review", "rejected_retry") %}
-              {% set forward_url = "/jobs/" ~ job.job_id ~ "/tables/" ~ table.table_id ~ "/approve" %}
-              {% set discard_url = "/jobs/" ~ job.job_id ~ "/tables/" ~ table.table_id ~ "/discard" %}
-            {% elif table.phase == "clean" and table.status == "pending_shape_review" %}
-              {% set forward_url = "/jobs/" ~ job.job_id ~ "/tables/" ~ table.table_id ~ "/approve-clean-shape" %}
-              {% set discard_url = "/jobs/" ~ job.job_id ~ "/tables/" ~ table.table_id ~ "/discard-clean" %}
-            {% elif table.phase == "clean" and table.status == "pending_transform_review" %}
-              {% set forward_url = "/jobs/" ~ job.job_id ~ "/tables/" ~ table.table_id ~ "/approve-transformation" %}
-              {% set discard_url = "/jobs/" ~ job.job_id ~ "/tables/" ~ table.table_id ~ "/discard-clean" %}
-            {% endif %}
-            <div class="se-board-tile{% if lane.key == 'discarded' %} is-discarded{% endif %}"
-                 data-table-id="{{ table.table_id }}"
-                 data-lane-order="{{ lane.order }}"
-                 {% if forward_url %}data-approve-url="{{ forward_url }}"{% endif %}
-                 {% if discard_url %}data-discard-url="{{ discard_url }}"{% endif %}
-                 draggable="{{ 'true' if (forward_url or discard_url) else 'false' }}"
-                 ondragstart="onCardDragStart(event)"
-                 ondragend="onCardDragEnd(event)"
-                 onclick="document.getElementById('modal-{{ table.table_id }}').classList.add('is-open')">
-              <div class="se-board-tile-title">{{ table.entity_name or table.table_id }}</div>
-              <div class="se-board-tile-sub">{{ table.table_id }} &middot; sheet: {{ table.sheet }}</div>
-              <span class="{{ status_class(table.status, table.phase) }} se-board-tile-badge">{{ table.status }}</span>
+    <header class="page-header">
+      <div class="se-job-title-row">
+        <h1>{{ job.filename }}</h1>
+        <span class="{{ status_class(job.status, '') }}">{{ job.status }}</span>
+      </div>
+      <p class="subtitle">job {{ job.job_id }}</p>
+    </header>
+
+    {% if job.auto_replayed or job.error %}
+      <div class="card">
+        {% if job.auto_replayed %}
+          <p class="form-hint">
+            This file matched a saved recipe (id <code>{{ job.matched_file_recipe_id }}</code>) — table
+            extraction and cleaning were replayed automatically with no AI calls. Previously-approved
+            tables still need a quick confirm below; previously-discarded tables are already in the
+            Discarded lane.
+          </p>
+          <form method="post" action="/jobs/{{ job.job_id }}/force-rerun">
+            <button class="button" type="submit">Force re-run (ignore the matched recipe)</button>
+          </form>
+        {% endif %}
+        {% if job.error %}
+          <p class="form-error"{% if job.auto_replayed %} style="margin-top:0.75rem;"{% endif %}>{{ job.error }}</p>
+        {% endif %}
+      </div>
+    {% endif %}
+
+    {% if not tables and job.status not in ("no_tables_found", "error") %}
+      <div class="empty">Parsing — tables will appear here shortly.</div>
+    {% endif %}
+
+    {% if tables %}
+      {% set board_lanes = lanes | rejectattr("key", "equalto", "discarded") | list %}
+      {% set discarded_lane = (lanes | selectattr("key", "equalto", "discarded") | list | first) %}
+      <div class="se-board-area">
+        <div class="se-board">
+          {% for lane in board_lanes %}
+            <div class="se-board-lane" data-lane-key="{{ lane.key }}" data-lane-order="{{ lane.order }}"
+                 ondragover="onLaneDragOver(event)" ondragleave="onLaneDragLeave(event)" ondrop="onLaneDrop(event)">
+              <div class="se-board-lane-head">
+                <h3>{{ lane.label }} ({{ lane.tables | length }})</h3>
+                {% if lane.approve_status and (lane.tables | selectattr("status", "equalto", lane.approve_status) | list | length > 0) %}
+                  <form method="post" action="/jobs/{{ job.job_id }}/approve-all/{{ lane.key }}">
+                    <button type="submit" class="button primary se-board-lane-approve-all">Approve all</button>
+                  </form>
+                {% endif %}
+              </div>
+              <div class="se-board-lane-body">
+                {% if not lane.tables %}
+                  <div class="se-board-lane-empty">Empty</div>
+                {% endif %}
+                {% for table in lane.tables %}{{ board_tile(job, lane, table) }}{% endfor %}
+              </div>
             </div>
           {% endfor %}
         </div>
-      {% endfor %}
-    </div>
-  {% endif %}
+
+        {% if discarded_lane %}
+          <div class="se-board-discarded" data-lane-key="{{ discarded_lane.key }}" data-lane-order="{{ discarded_lane.order }}"
+               ondragover="onLaneDragOver(event)" ondragleave="onLaneDragLeave(event)" ondrop="onLaneDrop(event)">
+            <div class="se-board-lane-head">
+              <h3>{{ discarded_lane.label }} ({{ discarded_lane.tables | length }})</h3>
+            </div>
+            <div class="se-board-lane-body">
+              {% if not discarded_lane.tables %}
+                <div class="se-board-lane-empty">Empty</div>
+              {% endif %}
+              {% for table in discarded_lane.tables %}{{ board_tile(job, discarded_lane, table) }}{% endfor %}
+            </div>
+          </div>
+        {% endif %}
+      </div>
+    {% endif %}
+  </div>
 
   {% for table in tables %}
     <div class="se-modal-backdrop" id="modal-{{ table.table_id }}" onclick="if (event.target === this) this.classList.remove('is-open')">

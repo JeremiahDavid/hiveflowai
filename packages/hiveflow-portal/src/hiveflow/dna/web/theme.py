@@ -83,6 +83,29 @@ def _side_nav_link_active(href: str, active_path: str) -> bool:
     return href_norm == path_norm
 
 
+# Inline SVGs for side-nav items that want a persistent glyph beside their
+# label (not just the collapsed-sidebar initials from `_nav_abbrev`). Keyed
+# by the 4th element of a side-nav item tuple; unrecognized/absent keys just
+# render without a glyph.
+_SIDE_NAV_GLYPHS: dict[str, str] = {
+    "dna": (
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+        'stroke-width="1.6" stroke-linecap="round" aria-hidden="true">'
+        '<path d="M7 3c0 4 10 4 10 8s-10 4-10 8"/>'
+        '<path d="M17 3c0 4-10 4-10 8s10 4 10 8"/>'
+        '<path d="M8 6.5h8M8 17.5h8M7.3 12h9.4"/>'
+        "</svg>"
+    ),
+    "spreadsheet": (
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+        'stroke-width="1.6" stroke-linejoin="round" aria-hidden="true">'
+        '<rect x="3.5" y="4" width="17" height="16" rx="1.5"/>'
+        '<path d="M3.5 9.5h17M3.5 15h17M9.5 4v16M15 4v16" stroke-width="1.3"/>'
+        "</svg>"
+    ),
+}
+
+
 def _nav_abbrev(label: str) -> str:
     words = [part for part in str(label).split() if part]
     if len(words) >= 2:
@@ -114,6 +137,7 @@ def _side_nav_tree(
         href = item[0]
         label = item[1]
         children: tuple[Any, ...] = item[2] if len(item) > 2 else ()
+        icon_key = item[3] if len(item) > 3 else None
         is_active = _side_nav_link_active(href, active_path)
         descendant_active = any(
             _nav_item_has_active_descendant(child, active_path) for child in children
@@ -123,6 +147,7 @@ def _side_nav_tree(
                 "href": url(href),
                 "label": label,
                 "abbrev": _nav_abbrev(label),
+                "icon_svg": Markup(_SIDE_NAV_GLYPHS[icon_key]) if icon_key in _SIDE_NAV_GLYPHS else None,
                 "active": is_active,
                 "is_ancestor": descendant_active and not is_active,
                 "open": descendant_active or is_active,

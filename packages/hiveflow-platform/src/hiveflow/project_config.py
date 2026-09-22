@@ -460,6 +460,18 @@ def global_agent_pipelines_stack_module_name() -> str:
     return "global_agent_pipelines_stack"
 
 
+def portal_session_secret_name(environment: str) -> str:
+    """Pinned Secrets Manager name for the global portal's session-signing secret.
+
+    Shared by ``GlobalUiStack`` (which creates it) and any stack that only
+    needs to read it (e.g. ``GlobalAgentPipelinesStack``, which imports it by
+    this name via ``Secret.from_secret_name_v2`` instead of taking a live
+    construct reference — that's what lets it deploy without also
+    constructing ``GlobalUiStack`` and paying for its Lambda bundling).
+    """
+    return f"meshflow-platform-portal-session-{environment.strip().lower()}"
+
+
 def spreadsheet_engine_state_machine_name(environment: str) -> str:
     """Name of the shared, global Spreadsheet Engine Step Functions state machine.
 

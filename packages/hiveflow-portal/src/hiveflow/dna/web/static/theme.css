@@ -441,6 +441,33 @@
       display: none;
     }
 
+    .portal-side-nav-glyph {
+      display: inline-flex;
+      flex-shrink: 0;
+      align-items: center;
+      justify-content: center;
+      width: 1.1rem;
+      height: 1.1rem;
+      margin-right: 0.55rem;
+      color: var(--text-dim);
+    }
+
+    .portal-side-nav-glyph svg {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .portal-side-nav-link:hover .portal-side-nav-glyph,
+    .portal-side-nav-link.active .portal-side-nav-glyph,
+    .portal-side-nav-link.is-ancestor .portal-side-nav-glyph {
+      color: var(--accent-mid);
+    }
+
+    .portal-side-nav.is-collapsed .portal-side-nav-glyph {
+      margin-right: 0;
+    }
+
     .portal-side-nav-link-text {
       white-space: nowrap;
       overflow: hidden;
@@ -1718,6 +1745,32 @@
     }
 
     .form-field input::placeholder { color: var(--text-dim); }
+
+    .form-field input[type="file"] {
+      padding: 0.45rem;
+      cursor: pointer;
+    }
+
+    .form-field input[type="file"]::file-selector-button,
+    .form-field input[type="file"]::-webkit-file-upload-button {
+      appearance: none;
+      -webkit-appearance: none;
+      margin-right: 0.75rem;
+      padding: 0.45rem 0.85rem;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--text);
+      background: transparent;
+      color: var(--text);
+      font: inherit;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.12s ease;
+    }
+
+    .form-field input[type="file"]:hover::file-selector-button,
+    .form-field input[type="file"]:hover::-webkit-file-upload-button {
+      background: var(--bg-elevated);
+    }
 
     .form-field select,
     .governance-role-select {
@@ -5360,29 +5413,84 @@
   resize: vertical;
 }
 
-.se-board {
+.se-jobs-table a {
+  color: var(--accent-electric-gold);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.se-jobs-table a:hover { text-decoration: underline; }
+
+.se-back-row { margin: 0 0 0.6rem; }
+
+.se-back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.se-back-link:hover { color: var(--accent-electric-gold); }
+
+.se-job-title-row {
   display: flex;
-  gap: 0.85rem;
-  overflow-x: auto;
-  padding-bottom: 0.5rem;
-  align-items: flex-start;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.se-job-title-row h1 { margin: 0; }
+
+/* .se-page/.se-board-area form a flex column that stretches to the bottom
+   of the scrollable .portal-content area (itself a flex item filled to the
+   viewport by the shell's own flex chain — see .shell-with-sidebar/
+   .portal-main above) so the board's lanes reach the bottom of the page
+   instead of only being as tall as their own cards. */
+.se-page {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
+.se-board-area {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.se-board {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.75rem;
+  align-items: stretch;
+  flex: 1;
+  min-height: 18rem;
 }
 
 .se-board-lane {
-  flex: 1 1 0;
-  min-width: 230px;
   background: var(--bg-elevated);
-  border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 0.65rem;
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+  min-height: 0;
 }
 
 .se-board-lane.is-drag-over {
-  border-color: var(--accent-mid);
+  outline: 2px dashed var(--accent-mid);
+  outline-offset: -2px;
   background: var(--tint-green);
+}
+
+.se-board-discarded.is-drag-over {
+  outline: 2px dashed var(--accent-margin);
+  outline-offset: -2px;
+  background: rgba(var(--danger-rgb), 0.1);
 }
 
 .se-board-lane-head {
@@ -5415,11 +5523,24 @@
   padding: 0.5rem 0.1rem;
 }
 
+.se-board-lane-body {
+  display: grid;
+  grid-auto-rows: min-content;
+  gap: 0.5rem;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
 .se-board-tile {
   background: var(--bg-base);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   padding: 0.6rem 0.7rem;
+  min-height: 4.75rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
   cursor: pointer;
   transition: border-color 0.12s ease;
 }
@@ -5429,9 +5550,40 @@
 .se-board-tile.is-dragging { opacity: 0.4; }
 .se-board-tile.is-discarded { opacity: 0.7; }
 
-.se-board-tile-title { font-weight: 600; font-size: 0.88rem; color: var(--text); }
-.se-board-tile-sub { color: var(--text-muted); font-size: 0.76rem; margin-top: 0.15rem; }
+.se-board-tile-title {
+  font-weight: 600;
+  font-size: 0.88rem;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.se-board-tile-sub {
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  margin-top: 0.15rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .se-board-tile-badge { display: inline-block; margin-top: 0.4rem; }
+
+.se-board-discarded {
+  margin-top: 0.75rem;
+  background: var(--bg-elevated);
+  border-radius: var(--radius);
+  padding: 0.65rem;
+}
+
+.se-board-discarded .se-board-lane-body {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.se-board-discarded .se-board-tile {
+  flex: 0 1 220px;
+  min-height: auto;
+}
 
 .se-modal-backdrop {
   display: none;

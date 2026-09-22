@@ -6,8 +6,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#F1EEE3">
   <title>{% block title %}Spreadsheet Engine{% endblock %} · hiveflowAI</title>
-  <link rel="icon" href="/static/hiveflowai-logo-mono.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/theme.css">
+  <link rel="icon" href="{{ favicon_href }}" type="image/svg+xml">
+  <link rel="stylesheet" href="{{ theme_css_href }}">
   <script>
   (function () {
     try {
@@ -24,8 +24,8 @@
     <header class="topbar">
       <div class="topbar-inner">
         <a class="brand" href="{{ brand_href }}">
-          <img class="brand-icon-light" src="/static/hiveflowai-logo.svg" alt="hiveflowAI symbol" width="36" height="36">
-          <img class="brand-icon-dark" src="/static/hiveflowai-logo-reversed.svg" alt="hiveflowAI symbol" width="36" height="36">
+          <img class="brand-icon-light" src="{{ logo_href }}" alt="hiveflowAI symbol" width="36" height="36">
+          <img class="brand-icon-dark" src="{{ logo_reversed_href }}" alt="hiveflowAI symbol" width="36" height="36">
           <div class="brand-text">
             <div class="brand-name">hiveflow<span>AI</span></div>
             <div class="brand-tagline">Connect. Unify. Reveal.</div>
@@ -50,14 +50,14 @@
       </div>
     </header>
     <div class="portal-workspace">
-      <aside class="portal-side-nav" data-nav-id="dna" aria-label="DNA navigation">
+      <aside class="portal-side-nav" data-nav-id="agents" aria-label="Agents navigation">
         <div class="portal-side-nav-header">
-          <span class="portal-side-nav-title">DNA</span>
-          <button type="button" class="portal-side-nav-toggle" aria-label="Collapse DNA navigation" aria-expanded="true">
+          <span class="portal-side-nav-title">Agents</span>
+          <button type="button" class="portal-side-nav-toggle" aria-label="Collapse Agents navigation" aria-expanded="true">
             <span class="portal-side-nav-toggle-icon" aria-hidden="true">⟨</span>
           </button>
         </div>
-        <nav class="portal-side-nav-links">{% for item in dna_nav_items %}{{ macros.side_nav_item(item) }}{% endfor %}</nav>
+        <nav class="portal-side-nav-links">{% for item in agents_nav_items %}{{ macros.side_nav_item(item) }}{% endfor %}</nav>
       </aside>
       <div class="portal-main">
         <div class="portal-content">{% block content %}{% endblock %}</div>

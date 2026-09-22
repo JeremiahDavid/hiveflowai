@@ -207,7 +207,7 @@ def test_portal_nav_data_dropdown_and_governance(tmp_path: Path, portal_env: Non
     assert b"Semantic Mappings" not in catalog_page.data
     assert b"Source Browser" in catalog_page.data
     assert b"DNA Catalog" in catalog_page.data
-    assert b"DNA Engine" in catalog_page.data
+    assert b"DNA Engine" not in catalog_page.data
     assert b"Semantic Builder" not in catalog_page.data
     assert b"Semantic Browser" not in catalog_page.data
     assert b"KPI Generator" not in catalog_page.data
@@ -227,8 +227,9 @@ def test_portal_nav_data_dropdown_and_governance(tmp_path: Path, portal_env: Non
 
     kpi = client.get("/portal/dna/kpi-generator")
     assert kpi.status_code == 200
-    assert b'data-nav-id="dna"' in kpi.data
+    assert b'data-nav-id="agents"' in kpi.data
     assert b"DNA Engine" in kpi.data
+    assert b"Spreadsheet Engine" not in kpi.data
     assert b"Refresh DNA tables" in kpi.data
     assert b"Refresh gold tables" not in kpi.data
     assert b"Refresh silver tables" not in kpi.data

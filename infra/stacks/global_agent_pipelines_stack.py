@@ -22,6 +22,16 @@ class GlobalAgentPipelinesStack(Stack):
 
     Today this holds only the Spreadsheet Engine; any future agent pipeline
     should land here too rather than being built per-company again.
+
+    Deliberately does NOT take a live ``GlobalUiStack`` construct reference for
+    the portal session secret (contrast with ``PortalStack``/``ReportingStack``,
+    which do): needing that object would force ``app.py`` to construct
+    ``GlobalUiStack`` — and pay for its "ui"-profile Lambda bundling — just to
+    deploy this stack. Instead this stack imports the secret by its pinned name
+    (``hiveflow.project_config.portal_session_secret_name``) so it can be
+    deployed alone via ``-c scope=agent_pipelines``, skipping every sibling
+    platform stack's bundling (confirmed dominant cost behind slow
+    ``GlobalAgentPipelinesStack`` deploys — see ``infra/cdk_scope.py``).
     """
 
     def __init__(
@@ -31,7 +41,7 @@ class GlobalAgentPipelinesStack(Stack):
         *,
         environment: str,
         ui_config: dict[str, Any],
-        portal_session_secret: secretsmanager.ISecret | None = None,
+        portal_ui_enabled: bool = False,
         **kwargs,
     ) -> None:
         super().__init__(scope, construct_id, **kwargs)
@@ -40,10 +50,26 @@ class GlobalAgentPipelinesStack(Stack):
         Tags.of(self).add("hiveflow:component", "global-agent-pipelines")
         Tags.of(self).add("hiveflow:environment", env)
 
-        from hiveflow.project_config import cost_allocation_tags, get_spreadsheet_engine_hostname
+        from hiveflow.project_config import (
+            cost_allocation_tags,
+            get_spreadsheet_engine_hostname,
+            portal_session_secret_name,
+        )
 
         for key, value in cost_allocation_tags("PLATFORM", env).items():
             Tags.of(self).add(key, value)
+
+        # Imported by name (see class docstring), not passed in as a live
+        # object — None only when the platform UI itself is disabled for this
+        # environment (see spreadsheet_engine.create_spreadsheet_engine's
+        # docstring for what that means for auth).
+        portal_session_secret = (
+            secretsmanager.Secret.from_secret_name_v2(
+                self, "ImportedPortalSessionSecret", portal_session_secret_name(env)
+            )
+            if portal_ui_enabled
+            else None
+        )
 
         from spreadsheet_engine import create_spreadsheet_engine
 

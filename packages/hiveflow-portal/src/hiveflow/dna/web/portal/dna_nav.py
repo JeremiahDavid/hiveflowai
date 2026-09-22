@@ -24,7 +24,11 @@ _DNA_CATALOG_LABEL = "DNA Catalog"
 _DATA_PROFILE_LABEL = "Data Profile"
 _MODEL_MAPPING_LABEL = "Model Mapping"
 
-SideNavItem = tuple[str, str] | tuple[str, str, tuple[Any, ...]]
+SideNavItem = (
+    tuple[str, str]
+    | tuple[str, str, tuple[Any, ...]]
+    | tuple[str, str, tuple[Any, ...], str]
+)
 
 
 _SOURCE_LABELS = {
@@ -63,15 +67,25 @@ def _spreadsheet_engine_nav_items() -> tuple[SideNavItem, ...]:
     cookie_domain = os.getenv("HIVEFLOW_PORTAL_COOKIE_DOMAIN", "").strip()
     if not cookie_domain:
         return ()
-    return ((f"https://spreadsheet-engine{cookie_domain}/", "Spreadsheet Engine"),)
+    return (
+        (f"https://spreadsheet-engine{cookie_domain}/", "Spreadsheet Engine", (), "spreadsheet"),
+    )
+
+
+def agents_section_nav() -> tuple[SideNavItem, ...]:
+    """DNA Engine + Spreadsheet Engine — the Agents pillar between DNA and
+    Governance. Each item carries an icon key (4th tuple element) rendered
+    beside its label in the sidebar."""
+    return (
+        (KPI_GENERATOR_ROOT, _KPI_GENERATOR_LABEL, (), "dna"),
+        *_spreadsheet_engine_nav_items(),
+    )
 
 
 def dna_section_nav(settings: DnaSettings | None) -> tuple[Any, ...]:
     if settings is None:
         return (
             (SOURCE_DOCS_INSPECTOR_ROOT, _SOURCE_BROWSER_LABEL),
-            *_spreadsheet_engine_nav_items(),
-            (KPI_GENERATOR_ROOT, _KPI_GENERATOR_LABEL),
             (CATALOG_ROOT, _DNA_CATALOG_LABEL),
             (DATA_PROFILE_ROOT, _DATA_PROFILE_LABEL),
             (MODEL_MAPPING_ROOT, _MODEL_MAPPING_LABEL),
@@ -85,8 +99,6 @@ def dna_section_nav(settings: DnaSettings | None) -> tuple[Any, ...]:
     )
     return (
         (SOURCE_DOCS_INSPECTOR_ROOT, _SOURCE_BROWSER_LABEL),
-        *_spreadsheet_engine_nav_items(),
-        (KPI_GENERATOR_ROOT, _KPI_GENERATOR_LABEL),
         catalog_item,
         (DATA_PROFILE_ROOT, _DATA_PROFILE_LABEL),
         (MODEL_MAPPING_ROOT, _MODEL_MAPPING_LABEL),

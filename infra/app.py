@@ -159,29 +159,38 @@ if cdk_scope in ("all", "ingest"):
                 description=f"HiveFlow DNA semantic engine for {company}/{environment}",
             )
 
-if cdk_scope in ("all", "platform") and platform_enabled:
-    global_ui_module = importlib.import_module(f"stacks.{global_ui_stack_module_name()}")
-    global_dns_module = importlib.import_module(f"stacks.{global_dns_stack_module_name()}")
-    global_dna_module = importlib.import_module(f"stacks.{global_dna_stack_module_name()}")
+if cdk_scope in ("all", "platform", "agent_pipelines") and platform_enabled:
+    # GlobalAgentPipelinesStack imports its portal session secret by name
+    # (see hiveflow.project_config.portal_session_secret_name) rather than
+    # taking a live GlobalUiStack reference, so it's the only platform stack
+    # this module needs under `-c scope=agent_pipelines` — everything else in
+    # this block is skipped in that scope, which is what actually avoids
+    # bundling every sibling platform Lambda (ui/reporting/full profiles) just
+    # to deploy the Spreadsheet Engine. See infra/cdk_scope.py.
     global_agent_pipelines_module = importlib.import_module(
         f"stacks.{global_agent_pipelines_stack_module_name()}"
     )
-    portal_module = importlib.import_module(f"stacks.{portal_stack_module_name()}")
-    platform_admin_module = importlib.import_module(f"stacks.{platform_admin_stack_module_name()}")
-    provisioning_module = importlib.import_module(f"stacks.{provisioning_stack_module_name()}")
 
-    # Legacy per-client ReportingStack + per-client reporting DNS records. Off by
-    # default now that PortalStack serves every client through the wildcard
-    # domain; `-c legacyReporting=true` keeps them for the cut-over / rollback
-    # window (see the Phase 9 plan).
-    legacy_reporting = str(
-        app.node.try_get_context("legacyReporting") or ""
-    ).strip().lower() in ("1", "true", "yes")
-    reporting_module = (
-        importlib.import_module(f"stacks.{reporting_stack_module_name()}")
-        if legacy_reporting
-        else None
-    )
+    if cdk_scope in ("all", "platform"):
+        global_ui_module = importlib.import_module(f"stacks.{global_ui_stack_module_name()}")
+        global_dns_module = importlib.import_module(f"stacks.{global_dns_stack_module_name()}")
+        global_dna_module = importlib.import_module(f"stacks.{global_dna_stack_module_name()}")
+        portal_module = importlib.import_module(f"stacks.{portal_stack_module_name()}")
+        platform_admin_module = importlib.import_module(f"stacks.{platform_admin_stack_module_name()}")
+        provisioning_module = importlib.import_module(f"stacks.{provisioning_stack_module_name()}")
+
+        # Legacy per-client ReportingStack + per-client reporting DNS records. Off
+        # by default now that PortalStack serves every client through the
+        # wildcard domain; `-c legacyReporting=true` keeps them for the
+        # cut-over / rollback window (see the Phase 9 plan).
+        legacy_reporting = str(
+            app.node.try_get_context("legacyReporting") or ""
+        ).strip().lower() in ("1", "true", "yes")
+        reporting_module = (
+            importlib.import_module(f"stacks.{reporting_stack_module_name()}")
+            if legacy_reporting
+            else None
+        )
 
     for environment, platform_env_config in iter_platform_deploy_environments():
         if filter_environment and environment != filter_environment:
@@ -189,6 +198,23 @@ if cdk_scope in ("all", "platform") and platform_enabled:
 
         account, region = resolve_aws_deploy_env(platform_env_config, environment)
         ui_config = get_ui_config(platform_env_config)
+
+        global_agent_pipelines_module.GlobalAgentPipelinesStack(
+            app,
+            global_agent_pipelines_stack_name(environment),
+            environment=environment,
+            ui_config=ui_config,
+            portal_ui_enabled=is_platform_ui_enabled(platform_env_config),
+            env=cdk.Environment(
+                account=account,
+                region=region,
+            ),
+            description=f"Shared multi-tenant AI-agent pipelines (Spreadsheet Engine) for {environment}",
+        )
+
+        if cdk_scope not in ("all", "platform"):
+            continue
+
         dns_stack_enabled = is_global_dns_stack_enabled(platform_env_config)
         client_buckets = resolve_portal_client_buckets(
             platform_env_config,
@@ -222,21 +248,6 @@ if cdk_scope in ("all", "platform") and platform_enabled:
                 ),
                 description=f"Global HiveFlowAI UI for {environment}",
             )
-
-        global_agent_pipelines_module.GlobalAgentPipelinesStack(
-            app,
-            global_agent_pipelines_stack_name(environment),
-            environment=environment,
-            ui_config=ui_config,
-            portal_session_secret=(
-                global_ui_stack.portal_session_secret if global_ui_stack is not None else None
-            ),
-            env=cdk.Environment(
-                account=account,
-                region=region,
-            ),
-            description=f"Shared multi-tenant AI-agent pipelines (Spreadsheet Engine) for {environment}",
-        )
 
         platform_admin_stack = None
         if is_platform_ui_enabled(platform_env_config):

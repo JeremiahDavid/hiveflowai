@@ -1,4 +1,4 @@
-{% macro side_nav_link(item, child) %}<a class="portal-side-nav-link{% if child %} is-child{% endif %}{% if item.children %} has-children{% endif %}{% if item.active %} active{% elif item.is_ancestor %} is-ancestor{% endif %}" href="{{ item.href }}" title="{{ item.label }}"{% if item.active %} aria-current="page"{% endif %}><span class="portal-side-nav-icon" aria-hidden="true">{{ item.abbrev }}</span><span class="portal-side-nav-link-text">{{ item.label }}</span></a>{% endmacro %}
+{% macro side_nav_link(item, child) %}<a class="portal-side-nav-link{% if child %} is-child{% endif %}{% if item.children %} has-children{% endif %}{% if item.active %} active{% elif item.is_ancestor %} is-ancestor{% endif %}" href="{{ item.href }}" title="{{ item.label }}"{% if item.active %} aria-current="page"{% endif %}>{% if item.icon_svg %}<span class="portal-side-nav-glyph" aria-hidden="true">{{ item.icon_svg }}</span>{% else %}<span class="portal-side-nav-icon" aria-hidden="true">{{ item.abbrev }}</span>{% endif %}<span class="portal-side-nav-link-text">{{ item.label }}</span></a>{% endmacro %}
 
 {% macro side_nav_item(item, depth=0) %}
 {% if item.children %}
