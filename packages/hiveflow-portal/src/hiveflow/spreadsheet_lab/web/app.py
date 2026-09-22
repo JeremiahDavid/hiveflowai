@@ -114,16 +114,28 @@ def _layout_ctx(request: Request) -> dict[str, Any]:
     username, the DNA sidebar (this app's own nav item marked active so the
     portal's other DNA tools stay one click away), and the top nav/logout
     links back to the real portal (this app owns no session of its own to
-    log out of — see auth.py)."""
+    log out of — see auth.py).
+
+    DNA/reporting pages live only on the tenant's own subdomain
+    (``{client_id}.{cookie_domain}``) — the bare primary site
+    (``HIVEFLOW_PRIMARY_SITE_URL``) runs the portal Lambda in "global" mode,
+    which serves login/marketing only and 404s on every DNA route (confirmed
+    by a real repro: /portal/semantics/source-docs on the primary hostname).
+    Mirrors hiveflow.dna.web.portal.routes._client_reporting_site_url.
+    """
     import os
 
     session = portal_session_from_request(request)
     primary_site = os.getenv("HIVEFLOW_PRIMARY_SITE_URL", "").strip().rstrip("/")
     cookie_domain = os.getenv("HIVEFLOW_PORTAL_COOKIE_DOMAIN", "").strip()
+    bare_cookie_domain = cookie_domain.lstrip(".")
     self_url = f"https://spreadsheet-engine{cookie_domain}/" if cookie_domain else "/"
+    client_id = (session.client_id if session else "").strip().lower()
+    tenant_site = f"https://{client_id}.{bare_cookie_domain}" if client_id and bare_cookie_domain else ""
 
     def portal_url(path: str) -> str:
-        return f"{primary_site}{path}" if primary_site else path
+        base = tenant_site or primary_site
+        return f"{base}{path}" if base else path
 
     dna_nav_items = [
         {
