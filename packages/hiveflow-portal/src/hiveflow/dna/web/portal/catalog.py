@@ -14,7 +14,7 @@ from hiveflow.dna.web.templating import render_template
 from hiveflow.dna.web.theme import empty_state
 
 CATALOG_PREVIEW_LIMIT = 5
-CATALOG_ROOT = "/portal/catalog"
+CATALOG_ROOT = "/catalog"
 SILVER_CATALOG_ROOT = f"{CATALOG_ROOT}/silver"
 GOLD_CATALOG_ROOT = f"{CATALOG_ROOT}/gold"
 

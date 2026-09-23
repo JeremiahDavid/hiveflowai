@@ -9,7 +9,7 @@ from werkzeug.test import Client
 
 from hiveflow.dna.settings import DnaSettings
 from hiveflow.dna.web.app import create_app
-from hiveflow.dna.web.portal.auth import authenticate
+from hiveflow.dna.web.portal.auth_login import authenticate
 from hiveflow.dna.web.portal.cognito import (
     CLIENT_ID_ATTRIBUTE,
     ROLE_ATTRIBUTE,

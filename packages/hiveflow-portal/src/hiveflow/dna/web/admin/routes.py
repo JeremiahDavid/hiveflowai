@@ -4,7 +4,8 @@ Self-contained: verified to depend only on `company`/`environment` (the
 deploy-target closure vars from create_app), never on portal internals or on
 settings/env_config/ui_mode. Auth (require_portal_session/login_response/
 clear_session_cookie) is the one legitimate shared dependency, imported from
-portal.auth's public API — not its private internals.
+portal.auth's and portal.auth_login's public API — not their private
+internals.
 """
 
 from __future__ import annotations
@@ -17,9 +18,9 @@ from werkzeug.wrappers import Request, Response
 
 from hiveflow.dna.web.portal.auth import (
     clear_session_cookie,
-    login_response,
     require_portal_session,
 )
+from hiveflow.dna.web.portal.auth_login import login_response
 from hiveflow.dna.web.routing_helpers import (
     _app_url,
     _json_response,

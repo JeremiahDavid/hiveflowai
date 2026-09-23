@@ -45,30 +45,20 @@ GLOBAL_PATHS = [
     "/pricing",
     "/portal/login",
     "/portal/logout",
-    "/portal/admin/users",
     "/portal",
     "/portal/",
 ]
 
+# DNA/Agents/Governance/Source Browser now live entirely on the DNA Engine
+# subdomain (see docs/dna-engine.md, hiveflow.dna_engine.web) — their route
+# dispatch is covered by test_dna_engine_web.py, not here. "/portal/admin/*"
+# and "/definitions"/"/semantics" are cross-subdomain redirects intercepted
+# before the router even runs (see app.py's DNA_ENGINE_LEGACY_REDIRECTS).
 REPORTING_PATHS = [
     "/portal/login",
     "/portal/logout",
     "/portal",
     "/portal/",
-    "/portal/dna",
-    "/portal/dna/kpi-generator/status",
-    "/portal/dna/kpi-generator",
-    "/portal/catalog/silver",
-    "/portal/catalog/gold",
-    "/portal/catalog",
-    "/portal/governance",
-    "/portal/governance/users",
-    "/portal/governance/config",
-    "/portal/governance/config/preview/exit",
-    "/portal/semantics/source-docs",
-    "/portal/admin/users",
-    "/portal/admin/config",
-    "/portal/admin/config/preview/exit",
     "/portal/executive",
     "/portal/revenue",
     "/portal/revenue-trend",
@@ -77,8 +67,6 @@ REPORTING_PATHS = [
     "/api/manifest",
     "/api/reporting/pages",
     "/api/reporting/catalog",
-    "/api/source-docs-gold",
-    "/api/source-docs-gold/versions",
 ]
 
 NON_ROUTABLE = {404, 500}

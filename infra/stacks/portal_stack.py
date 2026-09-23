@@ -20,13 +20,19 @@ SERVE_ROLE_NAME_TEMPLATE = "hiveflow-portal-{environment}-serve-role"
 
 
 class PortalStack(Stack):
-    """The single multi-tenant client reporting portal.
+    """The single multi-tenant client reporting portal — Reporting Engine only.
 
     Replaces the per-client ``ReportingStack``. One Lambda + one API Gateway serve
     every client; the tenant is resolved per request from the Cognito ``client_id``
     claim. This Lambda's own role can touch nothing tenant-scoped — it assumes
     ``hiveflow-portal-tenant-{company}-{env}`` (minted by each company's DnaStack)
     per request for all S3 / Athena / Glue / Step Functions access.
+
+    DNA/Governance/Agents content (catalog, governance, data profile, model
+    mapping, source docs, KPI Generator) moved out to its own subdomain/app —
+    see ``infra/dna_engine.py`` / ``infra/stacks/global_dna_engine_stack.py``
+    and ``docs/dna-engine.md``. This stack now only serves login, session
+    issuance, and the client-configured reporting dashboards.
     """
 
     web_api: apigateway.RestApi
@@ -85,9 +91,6 @@ class PortalStack(Stack):
             portal_session_secret=portal_session_secret,
             config_bucket=config_bucket,
             environment=env_slug,
-            # Literal name (not reporting_fn.function_name) — referencing the
-            # function here would cycle role-policy <-> function.
-            function_name=f"portal-{env_slug}-reporting-ui-serve",
         )
 
         alias = self._canary_alias(reporting_fn)
@@ -218,7 +221,6 @@ class PortalStack(Stack):
         portal_session_secret: secretsmanager.ISecret,
         config_bucket: str,
         environment: str,
-        function_name: str,
     ) -> None:
         # The ONLY route to tenant data: assume a per-company tenant role.
         serve_role.add_to_policy(
@@ -236,16 +238,19 @@ class PortalStack(Stack):
                 resources=[f"arn:aws:s3:::{config_bucket}/config.yaml"],
             )
         )
+        # Login (AdminInitiateAuth/AdminRespondToAuthChallenge) and the
+        # is_admin check every authenticated request makes (AdminGetUser, via
+        # portal_user_is_admin — still used here for the Reporting Engine's
+        # preview-banner gating). Governance-users-only actions
+        # (AdminCreateUser/AdminDeleteUser/AdminUpdateUserAttributes/
+        # ListUsers) moved to DNA Engine's role along with that page — see
+        # infra/dna_engine.py.
         serve_role.add_to_policy(
             iam.PolicyStatement(
                 actions=[
                     "cognito-idp:AdminInitiateAuth",
                     "cognito-idp:AdminRespondToAuthChallenge",
                     "cognito-idp:AdminGetUser",
-                    "cognito-idp:AdminCreateUser",
-                    "cognito-idp:AdminDeleteUser",
-                    "cognito-idp:AdminUpdateUserAttributes",
-                    "cognito-idp:ListUsers",
                 ],
                 resources=[portal_user_pool.user_pool_arn],
             )
@@ -254,30 +259,5 @@ class PortalStack(Stack):
             iam.PolicyStatement(
                 actions=["cognito-idp:ForgotPassword", "cognito-idp:ConfirmForgotPassword"],
                 resources=["*"],
-            )
-        )
-        # Config Assistant / KPI Generator drafting — Bedrock is shared, not tenant data.
-        serve_role.add_to_policy(
-            iam.PolicyStatement(
-                actions=[
-                    "bedrock:InvokeModel",
-                    "bedrock:InvokeModelWithResponseStream",
-                    "bedrock:Converse",
-                    "bedrock:ConverseStream",
-                    "aws-marketplace:ViewSubscriptions",
-                    "aws-marketplace:Subscribe",
-                    "aws-marketplace:Unsubscribe",
-                ],
-                resources=["*"],
-            )
-        )
-        # Async Config Assistant / KPI Generator self-invoke.
-        serve_role.add_to_policy(
-            iam.PolicyStatement(
-                actions=["lambda:InvokeFunction"],
-                resources=[
-                    f"arn:aws:lambda:{self.region}:{self.account}:function:{function_name}",
-                    f"arn:aws:lambda:{self.region}:{self.account}:function:{function_name}:*",
-                ],
             )
         )

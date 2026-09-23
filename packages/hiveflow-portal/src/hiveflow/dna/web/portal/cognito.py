@@ -13,7 +13,7 @@ from hiveflow.dna.web.cognito_core import (
     build_user_attributes as _build_user_attributes,
     cognito_client as _cognito_client,
 )
-from hiveflow.dna.web.portal.auth import PortalUser
+from hiveflow.dna.web.portal.auth_login import PortalUser
 
 logger = logging.getLogger("hiveflow.portal.cognito")
 

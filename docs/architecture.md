@@ -168,10 +168,12 @@ flowchart TB
 | **GlobalDnaStack-dev** | `infra/stacks/global_dna_stack.py` | Global BC MS Learn source-docs scrape / relationships / tags |
 | **DnaStack-POC-dev** | `infra/stacks/dna_stack.py` | DNA publish + per-client source-docs gold merge; mints `hiveflow-portal-tenant-{company}-{env}` (the role PortalStack assumes for this company's data) |
 | **GlobalUiStack-dev** | `infra/stacks/global_ui_stack.py` | Public site, Cognito, SES, session secret |
-| **PortalStack-dev** | `infra/stacks/portal_stack.py` | **One** multi-tenant client reporting Lambda + API for every client (`HIVEFLOW_UI_MODE=reporting_multitenant`); tenant from the Cognito `client_id` claim; assumes a per-company tenant role for all data access; canary alias deploy. Replaces per-client `ReportingStack` (retired; `-c legacyReporting=true` to re-synth during cut-over) |
-| **GlobalDnsStack-dev** | `infra/stacks/global_dns_stack.py` | Route 53, ACM, API Gateway custom domains — apex/`www`/`admin.` + the `*.{zone}` wildcard that routes every client subdomain to PortalStack (when `manage_dns: true`) |
+| **PortalStack-dev** | `infra/stacks/portal_stack.py` | **One** multi-tenant client reporting Lambda + API for every client (`HIVEFLOW_UI_MODE=reporting_multitenant`) — Reporting Engine dashboards + login/session issuance only; tenant from the Cognito `client_id` claim; assumes a per-company tenant role for all data access; canary alias deploy. Replaces per-client `ReportingStack` (retired; `-c legacyReporting=true` to re-synth during cut-over) |
+| **GlobalDnaEngineStack-dev** | `infra/stacks/global_dna_engine_stack.py` | DNA Engine — catalog, governance, data profile, model mapping, source docs, KPI Generator, split out of `PortalStack` onto its own fixed-hostname subdomain/Lambda (see [dna-engine.md](./dna-engine.md)); own IAM role (Bedrock + Cognito admin actions), same tenant-role-assumption model as PortalStack |
+| **GlobalAgentPipelinesStack-dev** | `infra/stacks/global_agent_pipelines_stack.py` | Spreadsheet Engine and any future lightweight agent pipeline — see [spreadsheet-engine.md](./spreadsheet-engine.md) |
+| **GlobalDnsStack-dev** | `infra/stacks/global_dns_stack.py` | Route 53, ACM, API Gateway custom domains — apex/`www`/`admin.` + the `*.{zone}` wildcard that routes every client subdomain to PortalStack (when `manage_dns: true`); DNA Engine and Spreadsheet Engine attach their own fixed-hostname subdomains within their own stacks instead |
 
-CDK entry: `infra/app.py`. Scopes: `all` | `ingest` | `platform` (`HIVEFLOW_CDK_SCOPE` / `-c scope=`).
+CDK entry: `infra/app.py`. Scopes: `all` | `ingest` | `platform` | `agent_pipelines` | `dna_engine` (`HIVEFLOW_CDK_SCOPE` / `-c scope=`) — the last two deploy Spreadsheet Engine / DNA Engine in isolation, skipping every sibling platform stack's Lambda bundling.
 
 **Not in current design:** CloudFront, DynamoDB, SQS, SNS, Kinesis.
 
@@ -184,6 +186,8 @@ CDK entry: `infra/app.py`. Scopes: `all` | `ingest` | `platform` (`HIVEFLOW_CDK_
 | Marketing / public site | `https://hive-flow-ai.com/`, `www` | GlobalUiStack |
 | Portal login / admin | `https://hive-flow-ai.com/portal/login` | GlobalUiStack |
 | Client reporting dashboard | `https://<client>.hive-flow-ai.com/` (`*.{zone}` wildcard) | PortalStack |
+| DNA Engine (catalog/governance/KPI Generator/etc.) | `https://dna-engine.hive-flow-ai.com/` | GlobalDnaEngineStack |
+| Spreadsheet Engine | `https://spreadsheet-engine.hive-flow-ai.com/` | GlobalAgentPipelinesStack |
 | QBD SOAP (ops) | stack output `QbdSoapUrl` (`…/prod/soap`) | IngestStack |
 
 App code: `packages/hiveflow-portal/packages/hiveflow-portal/src/hiveflow/dna/web/` (Werkzeug WSGI → `aws-wsgi` on Lambda).

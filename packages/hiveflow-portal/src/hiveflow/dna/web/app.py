@@ -15,9 +15,9 @@ from hiveflow.dna.settings import DnaSettings
 from hiveflow.dna.web.portal.auth import (
     PortalTenantUnresolved,
     effective_portal_client_id,
-    load_portal_users,
     session_from_request,
 )
+from hiveflow.dna.web.portal.auth_login import load_portal_users
 from hiveflow.dna.web.branding import load_branding_asset
 from hiveflow.dna.web.admin.routes import ADMIN_UI_ENDPOINTS, build_admin_routes
 from hiveflow.dna.web.routing_helpers import _app_url, _json_response
@@ -29,19 +29,30 @@ from hiveflow.dna.web.portal.routes import (
     build_portal_routes,
     request_tenant_scope,
 )
+from hiveflow.dna.web.portal.dna_nav import dna_engine_site_url
 from hiveflow.dna.web.portal.tenant_credentials import TenantCredentialsError
 from hiveflow.dna.web.theme import BRAND_NAME, MIME_TYPES, STATIC_DIR
 
+# Reporting Engine legacy paths — still served in-process by this app.
 LEGACY_REDIRECTS = {
     "/executive": "/portal/executive",
     "/revenue": "/portal/revenue",
-    "/definitions": "/portal/governance",
-    "/semantics": "/portal/semantics/source-docs",
-    "/portal/semantics": "/portal/semantics/source-docs",
     "/kpis": "/portal/executive",
-    "/portal/admin/users": "/portal/governance/users",
-    "/portal/admin/config": "/portal/governance/config",
-    "/portal/admin/config/preview/exit": "/portal/governance/config/preview/exit",
+}
+
+# DNA/Governance/Agents legacy paths — that content now lives on DNA Engine's
+# own subdomain (see docs/dna-engine.md), so these redirect cross-subdomain
+# via dna_engine_site_url() rather than resolving in-process. Falls back to
+# the bare relative path when no DNA Engine hostname is configured (local
+# dev without multi-tenant DNS wiring) — same graceful degradation every
+# other dna_engine_site_url() call site uses.
+DNA_ENGINE_LEGACY_REDIRECTS = {
+    "/definitions": "/governance",
+    "/semantics": "/semantics/source-docs",
+    "/portal/semantics": "/semantics/source-docs",
+    "/portal/admin/users": "/governance/users",
+    "/portal/admin/config": "/governance/config",
+    "/portal/admin/config/preview/exit": "/governance/config/preview/exit",
 }
 
 
@@ -191,6 +202,12 @@ def create_app(
         _prepare_gateway_environ(environ)
         request = Request(environ)
         path = request.path.rstrip("/") or "/"
+        dna_engine_target = DNA_ENGINE_LEGACY_REDIRECTS.get(path)
+        if dna_engine_target is not None:
+            location = dna_engine_site_url(dna_engine_target)
+            response = Response(status=302, headers={"Location": location})
+            return response(environ, start_response)
+
         legacy_target = LEGACY_REDIRECTS.get(path)
         if legacy_target is not None:
             if resolved_ui_mode == "global":

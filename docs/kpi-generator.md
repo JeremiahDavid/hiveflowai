@@ -1,10 +1,12 @@
-# KPI Generator (portal)
+# KPI Generator (DNA Engine)
 
-Natural-language KPI drafting in the client portal. The generator is a DNA modeling chat: it reuses existing silver/gold when the client already has the data, asks clarifying questions when the request is under-specified, and only then drafts silver and/or gold Athena SQL. **Approved SQL is pinned under governance semver and replayed verbatim** on scheduled refreshes — AI is not invoked again after approval.
+Natural-language KPI drafting, served as a page inside [DNA Engine](./dna-engine.md) (its own subdomain/app — not the portal shell). The generator is a DNA modeling chat: it reuses existing silver/gold when the client already has the data, asks clarifying questions when the request is under-specified, and only then drafts silver and/or gold Athena SQL. **Approved SQL is pinned under governance semver and replayed verbatim** on scheduled refreshes — AI is not invoked again after approval.
 
-**Portal route:** `/portal/dna/kpi-generator` (admin only)
+**Route:** `/dna/kpi-generator` on the DNA Engine host (admin only) — see [dna-engine.md](./dna-engine.md) for the site URL and auth model.
 
-**Code:** `packages/hiveflow-portal/src/hiveflow/dna/web/portal/kpi_generator/`
+**Code (business logic, unchanged/reused):** `packages/hiveflow-portal/src/hiveflow/dna/web/portal/kpi_generator/`
+
+**Code (routing seam):** `packages/hiveflow-portal/src/hiveflow/dna_engine/web/routes.py::register_kpi_generator_routes`
 
 ---
 
@@ -189,7 +191,7 @@ Proposal JSON retains `intent`, `questions` / `reuse` / `drafts`, prompt, primar
 | Surface | Role |
 |---|---|
 | **Source Browser** | Gold YAML reference (`entity_properties`, relationships, tags) reconciled with `latest_profile.yaml` from silver ETL |
-| **Pack Registry** (`/portal/governance`) | Version history for all governance saves, including KPI Generator drafts and approvals |
+| **Pack Registry** (`/governance` on the DNA Engine host) | Version history for all governance saves, including KPI Generator drafts and approvals |
 
 Silver consolidate writes `governance/source_semantic_reference/{source}/latest_profile.yaml`; the source-docs gold job enriches all three gold artifacts with `silver_column`, `in_silver`, and `origin` (relationships also get `silver_FK` / `silver_PK`).
 
@@ -205,5 +207,6 @@ Admins can trigger a DNA Step Functions refresh from the **DNA refresh** card on
 
 - **Silver_stg catalog:** generate uses `latest_profile.yaml` plus ingest parquet as the authoritative Glue column list (`silver_stg_{source}_{entity}`). Gold SQL uses the same columns on `silver_{source}_{entity}`. Source-docs property names that are not in silver_stg (navigation fields such as `paymentTermsCode`) are not valid SQL.
 - **Bedrock budget** shares the portal Config Assist monthly allowance meter.
-- **Validation** uses the reporting UI Lambda role (Athena + Glue read on the tenant catalog).
-- **Approve** reuses the same persistence path as the former direct “pin SQL” action, but only after explicit review of a saved draft (or approve from Review Drafts for a `pending_review` proposal at its draft version).
+- **Validation** uses DNA Engine's own Lambda role (Athena + Glue read on the tenant catalog, assumed per-tenant — see [dna-engine.md](./dna-engine.md)).
+- **Approve** reuses the same persistence path as the former direct "pin SQL" action, but only after explicit review of a saved draft (or approve from Review Drafts for a `pending_review` proposal at its draft version).
+- **Async generation self-invoke**: `enqueue_kpi_generation` (`kpi_generator/generation.py`) self-invokes the currently-running Lambda via `AWS_LAMBDA_FUNCTION_NAME` — since this now runs inside DNA Engine's own Lambda (`dna-engine-{env}-serve`, not the portal shell's), no explicit target-function wiring was needed when this moved; `hiveflow.dna_engine.web.lambda_handler.handler` receives the `kpi_generator_generate` task the same way the shell's handler used to.

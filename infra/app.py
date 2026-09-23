@@ -32,6 +32,8 @@ from hiveflow.project_config import (
     get_ui_config,
     global_agent_pipelines_stack_module_name,
     global_agent_pipelines_stack_name,
+    global_dna_engine_stack_module_name,
+    global_dna_engine_stack_name,
     global_dns_stack_module_name,
     global_dns_stack_name,
     global_dna_stack_module_name,
@@ -414,5 +416,40 @@ if cdk_scope in ("all", "platform", "agent_pipelines") and platform_enabled:
                 ),
                 description=f"HiveFlowAI public DNS for {environment}",
             )
+
+if cdk_scope in ("all", "platform", "dna_engine") and platform_enabled:
+    # GlobalDnaEngineStack imports its portal session secret by name and the
+    # Cognito user pool/client by SSM parameter name (see
+    # hiveflow.project_config.portal_session_secret_name /
+    # portal_user_pool_id_parameter_name), rather than taking live GlobalUiStack
+    # references — same reasoning GlobalAgentPipelinesStack's import-by-name
+    # gets it, so `-c scope=dna_engine` alone deploys without constructing
+    # GlobalUiStack (or GlobalAgentPipelinesStack) and paying for their bundling.
+    global_dna_engine_module = importlib.import_module(
+        f"stacks.{global_dna_engine_stack_module_name()}"
+    )
+
+    for environment, platform_env_config in iter_platform_deploy_environments():
+        if filter_environment and environment != filter_environment:
+            continue
+
+        account, region = resolve_aws_deploy_env(platform_env_config, environment)
+        ui_config = get_ui_config(platform_env_config)
+
+        global_dna_engine_module.GlobalDnaEngineStack(
+            app,
+            global_dna_engine_stack_name(environment),
+            environment=environment,
+            ui_config=ui_config,
+            portal_ui_enabled=is_platform_ui_enabled(platform_env_config),
+            env=cdk.Environment(
+                account=account,
+                region=region,
+            ),
+            description=(
+                "DNA Engine (catalog, governance, data profile, model mapping, "
+                f"source docs, KPI Generator) for {environment}"
+            ),
+        )
 
 app.synth()

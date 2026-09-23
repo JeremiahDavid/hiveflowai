@@ -8,6 +8,7 @@ from aws_cdk import aws_cognito as cognito
 from aws_cdk import aws_iam as iam
 from aws_cdk import aws_lambda as _lambda
 from aws_cdk import aws_secretsmanager as secretsmanager
+from aws_cdk import aws_ssm as ssm
 from constructs import Construct
 
 from lambda_bundle import HiveFlowLambdaRuntime, UI_BUNDLE_REVISION, hiveflow_lambda_runtime
@@ -99,6 +100,30 @@ class GlobalUiStack(Stack):
         )
         CfnOutput(self, "PortalUserPoolId", value=self.portal_user_pool.user_pool_id)
         CfnOutput(self, "PortalUserPoolClientId", value=self.portal_user_pool_client.user_pool_client_id)
+
+        # Published under a pinned SSM parameter name (not just a CfnOutput,
+        # which only a same-deploy Fn::ImportValue could read — exactly the
+        # hard cross-stack dependency GlobalDnaEngineStack needs to avoid, the
+        # same reasoning portal_session_secret_name's Secrets Manager entry
+        # already gets it for GlobalAgentPipelinesStack). See
+        # hiveflow.project_config.portal_user_pool_id_parameter_name.
+        from hiveflow.project_config import (
+            portal_user_pool_client_id_parameter_name,
+            portal_user_pool_id_parameter_name,
+        )
+
+        ssm.StringParameter(
+            self,
+            "PortalUserPoolIdParameter",
+            parameter_name=portal_user_pool_id_parameter_name(environment),
+            string_value=self.portal_user_pool.user_pool_id,
+        )
+        ssm.StringParameter(
+            self,
+            "PortalUserPoolClientIdParameter",
+            parameter_name=portal_user_pool_client_id_parameter_name(environment),
+            string_value=self.portal_user_pool_client.user_pool_client_id,
+        )
         portal_email = resolve_portal_email_settings(ui_config)
         if portal_email is not None:
             CfnOutput(self, "PortalEmailFromAddress", value=portal_email["from_address"])

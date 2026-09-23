@@ -284,7 +284,9 @@ def test_tenant_credentials_failure_raises(
 def test_kpi_worker_assumes_tenant_role(
     monkeypatch: pytest.MonkeyPatch, _clear_tenant_cache
 ) -> None:
-    monkeypatch.setenv("HIVEFLOW_UI_MODE", "reporting_multitenant")
+    """KPI Generator's async self-invoke now runs in DNA Engine's own Lambda
+    (hiveflow.dna_engine.web.lambda_handler), not the portal shell's — see
+    docs/dna-engine.md."""
     monkeypatch.setenv("HIVEFLOW_TENANT_ASSUME_ROLE", "1")
     monkeypatch.setenv("HIVEFLOW_ENVIRONMENT", "dev")
     monkeypatch.setenv("HIVEFLOW_COMPANY", "poc")
@@ -305,11 +307,9 @@ def test_kpi_worker_assumes_tenant_role(
         lambda settings, event: captured.update(company=settings.company) or {"ok": True},
     )
 
-    from hiveflow.dna.web.lambda_handler import ui_handler
+    from hiveflow.dna_engine.web.lambda_handler import handler
 
-    result = ui_handler(
-        {"hiveflow_task": "kpi_generator_generate", "client_id": "poc2"}, None
-    )
+    result = handler({"hiveflow_task": "kpi_generator_generate", "client_id": "poc2"}, None)
     assert result == {"ok": True}
     assert captured["company"] == "poc2"
     assert fake.assumed == [

@@ -12,14 +12,14 @@ from hiveflow.dna.web.portal.catalog import (
     list_catalog_tables,
 )
 
-DNA_ROOT = "/portal/dna"
+DNA_ROOT = "/dna"
 KPI_GENERATOR_ROOT = f"{DNA_ROOT}/kpi-generator"
-SOURCE_DOCS_INSPECTOR_ROOT = "/portal/semantics/source-docs"
+SOURCE_DOCS_INSPECTOR_ROOT = "/semantics/source-docs"
 DATA_PROFILE_ROOT = f"{DNA_ROOT}/data-profile"
 MODEL_MAPPING_ROOT = f"{DNA_ROOT}/model-mapping"
 
 _SOURCE_BROWSER_LABEL = "Source Browser"
-_KPI_GENERATOR_LABEL = "DNA Engine"
+_KPI_GENERATOR_LABEL = "KPI Generator"
 _DNA_CATALOG_LABEL = "DNA Catalog"
 _DATA_PROFILE_LABEL = "Data Profile"
 _MODEL_MAPPING_LABEL = "Model Mapping"
@@ -55,6 +55,30 @@ def _catalog_nav_children(settings: DnaSettings) -> tuple[tuple[str, str], ...]:
         (f"{CATALOG_ROOT}/{output.id}", catalog_table_label(output))
         for output in list_catalog_tables(settings)
     )
+
+
+def dna_engine_origin() -> str:
+    """Absolute origin for the DNA Engine subdomain (e.g.
+    ``https://dna-engine.hive-flow-ai.com``), derived from the same
+    ``HIVEFLOW_PORTAL_COOKIE_DOMAIN`` the Lambda already carries for
+    cross-subdomain session sharing. Empty when that isn't configured
+    (local/dev with no multi-tenant domain wiring). Used only by the portal
+    shell, which no longer serves any DNA/Agents/Governance route itself —
+    DNA Engine's own pages call ``agents_section_nav()``/``dna_section_nav()``
+    directly and get same-origin relative hrefs back, same as the shell did
+    before this split."""
+    cookie_domain = os.getenv("HIVEFLOW_PORTAL_COOKIE_DOMAIN", "").strip()
+    if not cookie_domain:
+        return ""
+    return f"https://dna-engine{cookie_domain}"
+
+
+def dna_engine_site_url(path: str) -> str:
+    """``path`` resolved against the DNA Engine origin, or unchanged (relative)
+    when no cookie domain is configured — matches ``_client_reporting_site_url``'s
+    graceful local-dev fallback."""
+    origin = dna_engine_origin()
+    return f"{origin}{path}" if origin else path
 
 
 def _spreadsheet_engine_nav_items() -> tuple[SideNavItem, ...]:

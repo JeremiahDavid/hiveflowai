@@ -129,47 +129,6 @@ def test_portal_login_and_overview(tmp_path: Path, portal_env: None) -> None:
     assert b"Executive snapshot" in overview.data
 
 
-def test_portal_governance_after_login(tmp_path: Path, portal_env: None) -> None:
-    client = _client(tmp_path)
-    client.post("/portal/login", data={"username": "poc", "password": "changeme"})
-
-    governance = client.get("/portal/governance")
-    assert governance.status_code == 200
-    assert b"Pack Registry" in governance.data
-    assert b"poc_dna_config" in governance.data or b"poc_reporting_config" in governance.data
-    assert b"Reporting layout pack" in governance.data
-    assert b"DNA Engine" in governance.data
-
-    kpi = client.get("/portal/dna/kpi-generator")
-    assert kpi.status_code == 200
-    assert b"DNA Engine" in kpi.data
-    assert b"Manual refreshes remaining" in kpi.data
-    assert b"Refresh DNA tables" in kpi.data
-    assert b"Refresh gold tables" not in kpi.data
-    assert b"Refresh silver tables" not in kpi.data
-
-    legacy = client.get("/portal/semantics", follow_redirects=True)
-    assert legacy.status_code == 200
-    assert b"Source Browser" in legacy.data or b"source-docs" in legacy.data
-
-
-def test_portal_manual_dna_refresh_action(
-    tmp_path: Path, portal_env: None, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setenv("HIVEFLOW_DNA_REFRESH_MOCK", "1")
-    client = _client(tmp_path)
-    client.post("/portal/login", data={"username": "poc", "password": "changeme"})
-
-    response = client.post(
-        "/portal/dna/kpi-generator",
-        data={"action": "manual_dna_refresh"},
-        follow_redirects=True,
-    )
-    assert response.status_code == 200
-    assert b"DNA refresh started" in response.data
-    assert b"manual refresh" in response.data.lower()
-
-
 def test_portal_nav_data_dropdown_and_governance(tmp_path: Path, portal_env: None) -> None:
     client = _client(tmp_path)
     client.post("/portal/login", data={"username": "poc", "password": "changeme"})
@@ -196,107 +155,6 @@ def test_portal_nav_data_dropdown_and_governance(tmp_path: Path, portal_env: Non
     assert b"portal-side-nav-link is-child active" in revenue.data
     assert b"portal-side-nav-link has-children is-ancestor" in revenue.data
     assert b">Governance</a>" in overview.data
-
-    catalog = client.get("/portal/catalog", follow_redirects=False)
-    assert catalog.status_code == 302
-    assert "/portal/catalog/" in catalog.headers["Location"]
-
-    catalog_page = client.get(catalog.headers["Location"])
-    assert catalog_page.status_code == 200
-    assert b'data-nav-id="dna"' in catalog_page.data
-    assert b"Semantic Mappings" not in catalog_page.data
-    assert b"Source Browser" in catalog_page.data
-    assert b"DNA Catalog" in catalog_page.data
-    assert b"DNA Engine" not in catalog_page.data
-    assert b"Semantic Builder" not in catalog_page.data
-    assert b"Semantic Browser" not in catalog_page.data
-    assert b"KPI Generator" not in catalog_page.data
-    assert b"Gold preview" in catalog_page.data
-    assert b"Fact Revenue Lines" in catalog_page.data or b"Dim Customers" in catalog_page.data
-    assert b'href="/portal/catalog/out_' in catalog_page.data
-
-    governance = client.get("/portal/governance")
-    assert governance.status_code == 200
-    assert b'data-nav-id="governance"' in governance.data
-    assert b"Pack Registry" in governance.data
-    assert b"DNA Engine" in governance.data
-    assert b"pack-history-subtitle" in governance.data
-    assert b">DNA</div>" in governance.data
-    assert b">Reporting</div>" in governance.data
-    assert b'class="portal-side-nav-link active" href="/portal/governance"' in governance.data
-
-    kpi = client.get("/portal/dna/kpi-generator")
-    assert kpi.status_code == 200
-    assert b'data-nav-id="agents"' in kpi.data
-    assert b"DNA Engine" in kpi.data
-    assert b"Spreadsheet Engine" not in kpi.data
-    assert b"Refresh DNA tables" in kpi.data
-    assert b"Refresh gold tables" not in kpi.data
-    assert b"Refresh silver tables" not in kpi.data
-
-    users = client.get("/portal/governance/users")
-    assert users.status_code == 200
-    assert b'class="portal-side-nav-link active" href="/portal/governance/users"' in users.data
-    assert b'class="portal-side-nav-link active" href="/portal/governance"' not in users.data
-
-
-def test_portal_catalog_silver_entity_renders_preview_table(tmp_path: Path, portal_env: None) -> None:
-    """Characterization test for render_catalog_silver + silver_preview_table_html,
-    added ahead of their Jinja2 conversion — previously this route had only a
-    status-code-only smoke check with no real entity."""
-    settings = DnaSettings(source="dbc", data_dir=tmp_path, pack_id="bc_intra_v1")
-    out = prefix_path(settings.data_dir, silver_entity_prefix(settings.source, "customers"))
-    write_parquet_local(
-        out,
-        "data.parquet",
-        [{"id": "c1", "displayName": "Acme Corp"}, {"id": "c2", "displayName": "Beta LLC"}],
-    )
-
-    client = _client(tmp_path)
-    client.post("/portal/login", data={"username": "poc", "password": "changeme"})
-
-    response = client.get("/portal/catalog/silver/customers")
-    assert response.status_code == 200
-    assert b"Silver preview" in response.data
-    assert b"Showing first" in response.data
-    assert b"Acme Corp" in response.data
-    assert b"Beta LLC" in response.data
-    assert b"Display Name" in response.data or b"displayName" in response.data
-
-
-def test_portal_catalog_silver_missing_entity_returns_404(tmp_path: Path, portal_env: None) -> None:
-    client = _client(tmp_path)
-    client.post("/portal/login", data={"username": "poc", "password": "changeme"})
-    response = client.get("/portal/catalog/silver/not-a-real-entity")
-    assert response.status_code == 404
-
-
-def test_governance_update_section_restricted_for_member(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setenv("HIVEFLOW_PORTAL_USERNAME", "poc")
-    monkeypatch.setenv("HIVEFLOW_PORTAL_PASSWORD", "changeme")
-    monkeypatch.setenv("HIVEFLOW_PORTAL_CLIENT_ID", "poc")
-    monkeypatch.setattr(
-        "hiveflow.dna.web.portal.cognito.portal_user_is_admin",
-        lambda *args, **kwargs: False,
-    )
-
-    client = _client(tmp_path)
-    client.post("/portal/login", data={"username": "poc", "password": "changeme"})
-    response = client.get("/portal/dna/kpi-generator")
-    assert response.status_code == 200
-    assert b"DNA Engine is available to portal admins" in response.data
-
-
-def test_kpi_generator_status_json(tmp_path: Path, portal_env: None) -> None:
-    client = _client(tmp_path)
-    client.post("/portal/login", data={"username": "poc", "password": "changeme"})
-    response = client.get("/portal/dna/kpi-generator/status?proposal_id=missing")
-    assert response.status_code == 200
-    payload = json.loads(response.data)
-    assert payload["proposal_id"] == "missing"
-    assert payload["generation_status"] == "complete"
 
 
 def test_api_gateway_stage_prefix(tmp_path: Path, portal_env: None) -> None:
@@ -673,95 +531,6 @@ def test_reporting_portal_login_redirects_to_global_with_relative_next(
     )
 
 
-def test_portal_admin_users_requires_login(tmp_path: Path, portal_env: None) -> None:
-    client = _client(tmp_path)
-    response = client.get("/portal/governance/users")
-    assert response.status_code == 302
-    assert "/portal/login" in response.headers["Location"]
-
-
-def test_portal_admin_users_lists_legacy_users(tmp_path: Path, portal_env: None) -> None:
-    client = _client(tmp_path)
-    client.post("/portal/login", data={"username": "poc", "password": "changeme"})
-
-    response = client.get("/portal/governance/users")
-    assert response.status_code == 200
-    assert b"Users" in response.data
-    assert b"poc" in response.data
-    assert b"1 of 10 seats used" in response.data
-    assert b"Pack Registry" in response.data
-
-
-def test_portal_admin_users_invite_post(tmp_path: Path, cognito_env: None, monkeypatch: pytest.MonkeyPatch) -> None:
-    from unittest.mock import patch
-
-    from hiveflow.dna.web.portal.auth import PortalUser
-    from hiveflow.dna.web.portal.cognito import PortalLoginResult, PortalUserRecord
-
-    monkeypatch.setenv("HIVEFLOW_PORTAL_USERNAME", "")
-    monkeypatch.setenv("HIVEFLOW_PORTAL_PASSWORD", "")
-
-    settings = DnaSettings(source="dbc", data_dir=tmp_path, pack_id="bc_intra_v1")
-    config = load_project_config()
-    try:
-        from hiveflow.project_config import get_platform_environment_config
-
-        env_config = get_platform_environment_config("dev")
-    except KeyError:
-        env_config = config["companies"]["poc"]["environments"]["dev"]
-    client = Client(create_app(settings, company="POC", environment="dev", env_config=env_config))
-
-    with patch(
-        "hiveflow.dna.web.portal.cognito.authenticate_with_cognito",
-        return_value=PortalLoginResult(
-            kind="authenticated",
-            user=PortalUser(username="poc", client_id="poc"),
-        ),
-    ), patch(
-        "hiveflow.dna.web.portal.cognito.portal_user_is_admin",
-        return_value=True,
-    ), patch(
-        "hiveflow.dna.web.portal.cognito.list_portal_users_for_client",
-        return_value=[
-            PortalUserRecord(
-                username="poc",
-                email="poc@example.com",
-                client_id="poc",
-                role="admin",
-                status="CONFIRMED",
-                enabled=True,
-            )
-        ],
-    ), patch(
-        "hiveflow.dna.web.portal.cognito.invite_portal_user",
-        return_value={
-            "username": "jane",
-            "client_id": "poc",
-            "email": "jane@example.com",
-            "role": "member",
-            "status": "FORCE_CHANGE_PASSWORD",
-            "delivery": "invite_email",
-        },
-    ) as mock_invite:
-        client.post("/portal/login", data={"action": "sign_in", "username": "poc", "password": "SecretPass123!"})
-        response = client.post(
-            "/portal/governance/users",
-            data={
-                "action": "invite",
-                "username": "jane",
-                "email": "jane@example.com",
-                "role": "member",
-            },
-        )
-
-    assert response.status_code == 200
-    assert b"Invite sent to jane@example.com" in response.data
-    mock_invite.assert_called_once()
-    assert mock_invite.call_args.kwargs["client_id"] == "poc"
-    assert mock_invite.call_args.kwargs["max_users"] == 10
-    assert mock_invite.call_args.kwargs["role"] == "member"
-
-
 def test_global_admin_can_access_fixed_client_reporting_portal(
     tmp_path: Path,
     cognito_env: None,
@@ -769,7 +538,7 @@ def test_global_admin_can_access_fixed_client_reporting_portal(
 ) -> None:
     from unittest.mock import patch
 
-    from hiveflow.dna.web.portal.auth import PortalUser
+    from hiveflow.dna.web.portal.auth_login import PortalUser
     from hiveflow.dna.web.portal.cognito import PortalLoginResult
 
     monkeypatch.setenv("HIVEFLOW_UI_MODE", "reporting")
@@ -811,9 +580,9 @@ def test_global_admin_can_access_fixed_client_reporting_portal(
         )
         assert login.status_code == 302
 
-        response = client.get("/portal/governance/users")
+        response = client.get("/portal/executive")
         assert response.status_code == 200
-        assert b"Users" in response.data
+        assert b"Executive" in response.data
 
 
 def test_client_user_cannot_access_other_client_reporting_portal(
@@ -847,13 +616,13 @@ def test_client_user_cannot_access_other_client_reporting_portal(
     )
     client.set_cookie("hiveflow_portal_session", token)
 
-    response = client.get("/portal/governance/users")
+    response = client.get("/portal/executive")
     assert response.status_code == 302
     assert "/portal/login" in (response.headers.get("Location") or "")
 
 
 def test_authorize_portal_client_access(monkeypatch: pytest.MonkeyPatch) -> None:
-    from hiveflow.dna.web.portal.auth import PortalClientAccessError, authorize_portal_client_access
+    from hiveflow.dna.web.portal.auth_login import PortalClientAccessError, authorize_portal_client_access
     from hiveflow.project_config import get_platform_environment_config
 
     monkeypatch.setenv("HIVEFLOW_ADMIN_USERNAME", "GlobalAdmin")

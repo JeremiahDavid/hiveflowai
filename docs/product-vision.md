@@ -183,6 +183,7 @@ The one thing that *should* change now is how new work is evaluated: prefer chan
 
 - [architecture.md](./architecture.md) — what is actually deployed today
 - [internal-execution-scoping/dna-semantic-engine.md](./internal-execution-scoping/dna-semantic-engine.md) — the pack to gold to portal mechanism that packs are built on
+- [dna-engine.md](./dna-engine.md) — catalog, governance, data profile, model mapping, source docs, and the KPI Generator's own subdomain/app
 - [kpi-generator.md](./kpi-generator.md) — governed KPI authoring, the pack-authoring surface
 - [spreadsheet-engine.md](./spreadsheet-engine.md) — T4 file connector
 - [internal-execution-scoping/v1-scope.md](./internal-execution-scoping/v1-scope.md) — earlier vertical framing, superseded on ICP but not on engineering

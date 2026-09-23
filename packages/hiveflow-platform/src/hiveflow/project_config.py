@@ -460,6 +460,14 @@ def global_agent_pipelines_stack_module_name() -> str:
     return "global_agent_pipelines_stack"
 
 
+def global_dna_engine_stack_name(environment: str) -> str:
+    return f"GlobalDnaEngineStack-{environment}"
+
+
+def global_dna_engine_stack_module_name() -> str:
+    return "global_dna_engine_stack"
+
+
 def portal_session_secret_name(environment: str) -> str:
     """Pinned Secrets Manager name for the global portal's session-signing secret.
 
@@ -470,6 +478,24 @@ def portal_session_secret_name(environment: str) -> str:
     constructing ``GlobalUiStack`` and paying for its Lambda bundling).
     """
     return f"meshflow-platform-portal-session-{environment.strip().lower()}"
+
+
+def portal_user_pool_id_parameter_name(environment: str) -> str:
+    """Pinned SSM parameter name publishing the global portal's Cognito user
+    pool id, for stacks that need to reference it without taking a live
+    ``GlobalUiStack`` construct reference (same reasoning as
+    ``portal_session_secret_name`` — see ``GlobalDnaEngineStack``, which needs
+    Cognito admin actions DNA Engine's role but no other live GlobalUiStack
+    resource). A ``CfnOutput`` alone isn't enough here: reading one from
+    another stack requires ``Fn::ImportValue``, which creates the exact hard
+    cross-stack CloudFormation dependency this avoids.
+    """
+    return f"/hiveflow/platform/{environment.strip().lower()}/portal-user-pool-id"
+
+
+def portal_user_pool_client_id_parameter_name(environment: str) -> str:
+    """Sibling of ``portal_user_pool_id_parameter_name`` for the pool's app client id."""
+    return f"/hiveflow/platform/{environment.strip().lower()}/portal-user-pool-client-id"
 
 
 def spreadsheet_engine_state_machine_name(environment: str) -> str:
@@ -491,6 +517,18 @@ def agent_pipelines_role_name(environment: str) -> str:
     agent-pipeline Lambda with one trust-policy entry.
     """
     return f"hiveflow-agent-pipelines-{environment.strip().lower()}-role"
+
+
+def dna_engine_role_name(environment: str) -> str:
+    """Dedicated IAM execution role for DNA Engine's Lambda.
+
+    Separate from ``agent_pipelines_role_name`` — DNA Engine's trust/
+    permission surface (Cognito admin actions for governance-users, Bedrock
+    for KPI generation) is materially different from Spreadsheet Engine's,
+    and each company's ``hiveflow-portal-tenant-{company}-{environment}``
+    role still needs to trust it the same way.
+    """
+    return f"hiveflow-dna-engine-{environment.strip().lower()}-role"
 
 
 def platform_admin_stack_name(environment: str) -> str:
@@ -520,6 +558,15 @@ def get_spreadsheet_engine_hostname(ui_config: dict[str, Any]) -> str:
     if not isinstance(cfg, dict):
         cfg = {}
     return str(cfg.get("hostname", "spreadsheet-engine")).strip().lower() or "spreadsheet-engine"
+
+
+def get_dna_engine_hostname(ui_config: dict[str, Any]) -> str:
+    """Subdomain for the DNA Engine UI, from
+    ``platform.environments.<env>.ui.dna_engine.hostname``."""
+    cfg = ui_config.get("dna_engine", {})
+    if not isinstance(cfg, dict):
+        cfg = {}
+    return str(cfg.get("hostname", "dna-engine")).strip().lower() or "dna-engine"
 
 
 def get_platform_config(*, path: Path | None = None) -> dict[str, Any]:

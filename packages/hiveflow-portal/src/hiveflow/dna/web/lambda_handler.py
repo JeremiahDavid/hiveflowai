@@ -1,32 +1,10 @@
 from __future__ import annotations
 
-import os
 from typing import Any
 
 from hiveflow.dna.web.asgi import get_asgi_app
 
 _mangum = None
-
-
-def _worker_dna_settings(payload: dict[str, Any]):
-    """Rebuild tenant ``DnaSettings`` for an async worker event.
-
-    Multi-tenant: the shared Lambda has no tenant env vars, so bind from the
-    event's ``client_id`` via the registry. Single-tenant (legacy ReportingStack):
-    fall back to env-var resolution.
-    """
-    from hiveflow.dna.runtime import resolve_dna_settings
-
-    client_id = str(payload.get("client_id") or "").strip()
-    multitenant = os.getenv("HIVEFLOW_UI_MODE", "").strip().lower() == "reporting_multitenant"
-    if client_id and multitenant:
-        from hiveflow.dna.web.portal.tenant import resolve_tenant_dna_settings
-        from hiveflow.project_config import resolve_selection
-
-        _company, environment = resolve_selection()
-        return resolve_tenant_dna_settings(client_id, environment)
-    # Legacy single-tenant ReportingStack: env vars carry the tenant.
-    return resolve_dna_settings()
 
 
 def _get_mangum():
@@ -101,16 +79,7 @@ def ui_handler(event: dict[str, Any] | None, context: Any) -> dict[str, Any]:
     if payload.get("RequestType") in {"Create", "Update", "Delete"}:
         return _cfn_reporting_init(payload)
 
-    task = str(payload.get("hiveflow_task") or "").strip()
-    if task == "kpi_generator_generate":
-        from hiveflow.dna.web.portal.kpi_generator.generation import run_kpi_generation_job
-        from hiveflow.dna.web.portal.tenant_credentials import tenant_credentials
-        from hiveflow.project_config import resolve_selection
-
-        settings = _worker_dna_settings(payload)
-        _company, environment = resolve_selection()
-        # No-op unless the multi-tenant Lambda is configured to assume roles.
-        with tenant_credentials(settings.company, environment):
-            return run_kpi_generation_job(settings, payload)
-
+    # KPI Generator's async self-invoke task moved to DNA Engine's own
+    # Lambda handler (hiveflow.dna_engine.web.lambda_handler) along with the
+    # rest of KPI Generator — see docs/dna-engine.md.
     return _get_mangum()(event, context)

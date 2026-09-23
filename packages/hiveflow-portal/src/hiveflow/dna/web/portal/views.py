@@ -32,7 +32,9 @@ from hiveflow.dna.web.portal.catalog import CATALOG_ROOT
 from hiveflow.dna.web.portal.dna_nav import (
     DNA_ROOT,
     KPI_GENERATOR_ROOT,
+    SOURCE_DOCS_INSPECTOR_ROOT,
     agents_section_nav,
+    dna_engine_site_url,
     dna_section_nav,
 )
 from hiveflow.dna.web.routing_helpers import _app_url
@@ -57,19 +59,30 @@ REVENUE_TREND_MONTHS = DEFAULT_CHART_MONTHS
 
 AGENTS_ROOT = KPI_GENERATOR_ROOT
 
-PORTAL_NAV = (
-    (DNA_ROOT, "DNA"),
-    (AGENTS_ROOT, "Agents"),
-    ("/portal/governance", "Governance"),
-)
+# DNA/Agents/Governance now live entirely on the DNA Engine subdomain (see
+# docs/dna-engine.md) — the shell no longer serves any of these paths itself,
+# so these top-bar tabs are absolute cross-subdomain links built at request
+# time (dna_engine_site_url() reads HIVEFLOW_PORTAL_COOKIE_DOMAIN, not fixed
+# at import time). Falls back to the bare relative path when no cookie
+# domain is configured (local dev without multi-tenant DNS wiring).
+def _portal_nav() -> tuple[tuple[str, str], ...]:
+    return (
+        (dna_engine_site_url(DNA_ROOT), "DNA"),
+        (dna_engine_site_url(AGENTS_ROOT), "Agents"),
+        (dna_engine_site_url("/governance"), "Governance"),
+    )
 
-# In-page sub-nav under Governance (always visible; pages enforce admin auth).
+
+# In-page sub-nav under Governance (always visible; pages enforce admin
+# auth). NOTE: this module's DNA/Agents/Governance render_* functions
+# (render_catalog, render_governance, etc.) are reused unchanged by DNA
+# Engine (see hiveflow.dna_engine.web.routes) — this constant, and
+# _portal_side_nav below, are still exercised there even though the shell
+# itself no longer serves any page whose active_path would match them.
 GOVERNANCE_SECTION_NAV = (
-    ("/portal/governance", "Pack Registry"),
-    ("/portal/governance/users", "Users"),
+    ("/governance", "Pack Registry"),
+    ("/governance/users", "Users"),
 )
-
-
 
 
 
@@ -257,27 +270,31 @@ def _history_table_rows(
 
 def _portal_nav_links(*, is_admin: bool = False) -> tuple[tuple[str, str], ...]:
     del is_admin  # top nav is the same; admin tools live under Governance sub-nav
-    return PORTAL_NAV
+    return _portal_nav()
 
 
 def _portal_nav_active_path(active_path: str) -> str:
+    # _portal_nav()'s DNA/Agents/Governance hrefs are absolute DNA Engine
+    # URLs now — the top-nav template compares this return value against
+    # those raw hrefs for string equality (theme.py::_nav_items), so a match
+    # here must be wrapped the same way, whichever app is currently
+    # rendering (the shell, remapping one of its own Reporting pages that
+    # will never actually match these prefixes; or DNA Engine itself,
+    # reusing this exact function for its own top-nav highlighting).
     if active_path.startswith(AGENTS_ROOT):
-        return AGENTS_ROOT
+        return dna_engine_site_url(AGENTS_ROOT)
     if (
-        active_path.startswith("/portal/semantics")
-        or active_path.startswith("/portal/catalog")
-        or active_path.startswith("/portal/dna")
+        active_path.startswith(SOURCE_DOCS_INSPECTOR_ROOT)
+        or active_path.startswith(CATALOG_ROOT)
+        or active_path.startswith(DNA_ROOT)
     ):
-        return DNA_ROOT
-    if active_path.startswith("/portal/governance") or active_path.startswith(
-        "/portal/admin/"
-    ):
-        return "/portal/governance"
+        return dna_engine_site_url(DNA_ROOT)
+    if active_path.startswith("/governance"):
+        return dna_engine_site_url("/governance")
     return active_path
 
 
 def _preview_banner_html(
-    url: Callable[[str], str],
     *,
     next_version: str,
     proposal_id: str,
@@ -286,9 +303,9 @@ def _preview_banner_html(
         "portal/_preview_banner.html",
         next_version=next_version,
         proposal_id=proposal_id,
-        back_url=url("/portal/governance"),
-        kpi_url=url("/portal/dna/kpi-generator"),
-        exit_url=url("/portal/governance/config/preview/exit"),
+        back_url=dna_engine_site_url("/governance"),
+        kpi_url=dna_engine_site_url(KPI_GENERATOR_ROOT),
+        exit_url=dna_engine_site_url("/governance/config/preview/exit"),
     )
 
 
@@ -398,15 +415,21 @@ def _portal_side_nav(
     dna_menu: tuple[Any, ...] | None = None,
     agents_menu: tuple[Any, ...] | None = None,
 ) -> tuple[str | None, tuple[Any, ...] | None, str | None]:
+    # active_path here is always the RAW (relative) path passed to
+    # _html_response by whichever app called it — the shell's own remaining
+    # routes only ever pass "/portal/..." Reporting Engine paths (last
+    # branch below); the DNA/Agents/Governance branches only ever match when
+    # DNA Engine reuses this function for its own pages (see views.py's
+    # module docstring note on GOVERNANCE_SECTION_NAV above).
     if active_path.startswith(AGENTS_ROOT):
         return "Agents", agents_menu or agents_section_nav(), "agents"
     if (
-        active_path.startswith("/portal/semantics")
-        or active_path.startswith("/portal/catalog")
-        or active_path.startswith("/portal/dna")
+        active_path.startswith(SOURCE_DOCS_INSPECTOR_ROOT)
+        or active_path.startswith(CATALOG_ROOT)
+        or active_path.startswith(DNA_ROOT)
     ):
         return "DNA", dna_menu or dna_section_nav(None), "dna"
-    if active_path.startswith("/portal/governance") or active_path.startswith("/portal/admin/"):
+    if active_path.startswith("/governance"):
         return "Governance", GOVERNANCE_SECTION_NAV, "governance"
     if active_path.startswith("/portal"):
         return "Reporting", data_menu, "reporting"
@@ -441,7 +464,6 @@ def _html_response(
     if preview_meta:
         body = (
             _preview_banner_html(
-                url,
                 next_version=str(preview_meta.get("next_version") or ""),
                 proposal_id=str(preview_meta.get("proposal_id") or ""),
             )
@@ -1588,7 +1610,7 @@ def _user_status_label(status: str) -> str:
 
 
 def _legacy_portal_users(client_id: str, *, company: str, environment: str) -> list[Any]:
-    from hiveflow.dna.web.portal.auth import load_portal_users
+    from hiveflow.dna.web.portal.auth_login import load_portal_users
     from hiveflow.dna.web.portal.cognito import PORTAL_ROLE_ADMIN, PortalUserRecord
 
     normalized = client_id.strip().lower()

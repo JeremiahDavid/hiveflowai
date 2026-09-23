@@ -46,6 +46,12 @@ platform:
           # GlobalAgentPipelinesStack — see infra/spreadsheet_engine.py).
           # Auth is the real portal's session cookie, not a separate secret.
           hostname: spreadsheet-engine
+        dna_engine:
+          # Subdomain for the DNA Engine UI — catalog, governance, data
+          # profile, model mapping, source docs, KPI Generator (its own
+          # stack, GlobalDnaEngineStack — see infra/dna_engine.py). Same
+          # auth model as spreadsheet_engine above.
+          hostname: dna-engine
         domain:
           zone_name: hive-flow-ai.com
           primary_hostname: hive-flow-ai.com

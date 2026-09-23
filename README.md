@@ -160,6 +160,12 @@ Spreadsheet Engine-only deploys skip *every* other platform stack (GlobalUiStack
 cdk deploy -c scope=agent_pipelines GlobalAgentPipelinesStack-dev
 ```
 
+DNA Engine (catalog, governance, data profile, model mapping, source docs, KPI Generator) is the same pattern, its own stack and scope — see [docs/dna-engine.md](docs/dna-engine.md):
+
+```powershell
+cdk deploy -c scope=dna_engine GlobalDnaEngineStack-dev
+```
+
 DNA semantic layer (transformations, gold publish) stays in **DnaStack** per company. Client reporting UI (charts, KPIs) is **one** shared **PortalStack** for every client — the tenant is resolved per request from the Cognito `client_id` claim and PortalStack assumes `hiveflow-portal-tenant-{company}-{env}` (minted by `DnaStack`) for that client's data. The global site and login live in **GlobalUiStack**. Every client is reached via the `*.{zone}` wildcard in **GlobalDnsStack** — no per-client stack or DNS record.
 
 ```powershell

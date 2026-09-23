@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-VALID_CDK_SCOPES = frozenset({"all", "ingest", "platform", "agent_pipelines"})
+VALID_CDK_SCOPES = frozenset({"all", "ingest", "platform", "agent_pipelines", "dna_engine"})
 
 
 def resolve_cdk_scope(*, context: str | None = None, env: str | None = None) -> str:

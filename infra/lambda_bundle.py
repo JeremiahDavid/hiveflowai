@@ -22,7 +22,13 @@ UI_BUNDLE_REVISION = "20260818-spreadsheet-openpyxl"
 DNA_BUNDLE_REVISION = "20260819-spreadsheet-induction-fallback"
 
 LambdaDepsProfile = Literal[
-    "full", "ui", "reporting", "parser", "spreadsheet_lab", "spreadsheet_lab_materialize"
+    "full",
+    "ui",
+    "reporting",
+    "parser",
+    "spreadsheet_lab",
+    "spreadsheet_lab_materialize",
+    "dna_engine",
 ]
 
 _PROFILE_REQUIREMENTS: dict[LambdaDepsProfile, str] = {
@@ -37,6 +43,10 @@ _PROFILE_REQUIREMENTS: dict[LambdaDepsProfile, str] = {
     # without blowing past Lambda's 250MB unzipped limit — confirmed by a real
     # deploy failure on SpreadsheetLabStack-dev, not a hypothetical.
     "spreadsheet_lab_materialize": "requirements-lambda-spreadsheet-lab-materialize.txt",
+    # DNA Engine (catalog/governance/data-profile/model-mapping/source-docs/
+    # KPI Generator) — same footprint as "reporting" (it's the same business
+    # logic, reused unchanged) plus python-multipart for FastAPI form parsing.
+    "dna_engine": "requirements-lambda-dna-engine.txt",
 }
 
 PACKAGE_HIVEFLOW_ROOTS: tuple[Path, ...] = (
@@ -509,6 +519,7 @@ def hiveflow_lambda_deps_layer(
         "parser": "HiveFlow spreadsheet-parser Python dependencies (interpret/propose)",
         "spreadsheet_lab": "HiveFlow Spreadsheet Lab sandbox Python dependencies",
         "spreadsheet_lab_materialize": "HiveFlow Spreadsheet Lab materialize-only Python dependencies (pyarrow)",
+        "dna_engine": "HiveFlow DNA Engine Python dependencies (catalog/governance/KPI Generator)",
     }
     return _lambda.LayerVersion(
         scope,

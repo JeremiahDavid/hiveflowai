@@ -15,7 +15,8 @@ from hiveflow.dna.web.cognito_core import (
     is_admin_group_member,
     is_allowed_admin_username,
 )
-from hiveflow.dna.web.portal.auth import PortalUser, global_portal_client_id
+from hiveflow.dna.web.portal.auth import global_portal_client_id
+from hiveflow.dna.web.portal.auth_login import PortalUser
 from hiveflow.dna.web.portal.cognito import (
     NEW_PASSWORD_CHALLENGE,
     PORTAL_ROLE_ADMIN,

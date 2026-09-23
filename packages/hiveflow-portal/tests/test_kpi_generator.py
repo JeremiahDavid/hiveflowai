@@ -40,12 +40,12 @@ from hiveflow.storage.paths import prefix_path, silver_entity_prefix, silver_stg
 def test_dna_nav_lists_source_browser_and_catalog() -> None:
     labels = [item[1] for item in dna_section_nav(None)]
     assert labels == ["Source Browser", "DNA Catalog", "Data Profile", "Model Mapping"]
-    assert KPI_GENERATOR_ROOT == "/portal/dna/kpi-generator"
+    assert KPI_GENERATOR_ROOT == "/dna/kpi-generator"
 
 
 def test_agents_nav_lists_dna_engine() -> None:
     labels = [item[1] for item in agents_section_nav()]
-    assert labels[0] == "DNA Engine"
+    assert labels[0] == "KPI Generator"
     assert agents_section_nav()[0][0] == KPI_GENERATOR_ROOT
 
 
